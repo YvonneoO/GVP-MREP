@@ -390,7 +390,7 @@ void SwarmDataManager::MapReqMSGCallback(const exp_comm_msgs::MapReqCConstPtr &m
 
 void SwarmDataManager::ShowTraj(const uint8_t &id){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 0;
     mk.action = visualization_msgs::Marker::ADD;

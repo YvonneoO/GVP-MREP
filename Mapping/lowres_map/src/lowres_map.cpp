@@ -72,6 +72,8 @@ void LowResMap::init(const ros::NodeHandle &nh,
         unknown_duration_, 0.5);
     nh_private.param(ns + "/Exp/drone_num", drone_num_, 1);
 
+    nh_private.param(ns + "/LowResMap/is_ground_robot", is_ground_robot_, false);
+
     //pub
     if(showmap_){
         node_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "/LowResMap/Nodes", 10);
@@ -1268,7 +1270,7 @@ void LowResMap::ShowGridLocal(const ros::TimerEvent& e){
             MKArray.markers[i].scale.x = resolution_/2;
             MKArray.markers[i].scale.y = resolution_/2;
             MKArray.markers[i].scale.z = resolution_/2;
-            MKArray.markers[i].header.frame_id = "world";
+            MKArray.markers[i].header.frame_id = "map";
             MKArray.markers[i].header.stamp = ros::Time::now();
             MKArray.markers[i].id = (*idit)*2;
             i++;
@@ -1418,7 +1420,7 @@ void LowResMap::Debug(vector<Eigen::Vector4d> &pts){
     mk.scale.x = 0.2;
     mk.scale.y = 0.2;
     mk.scale.z = 0.2;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 0;
     mk.color.a = 0.7;
@@ -1451,7 +1453,7 @@ void LowResMap::Debug(vector<Eigen::Vector3d> &pts){
     mk.scale.x = 0.15;
     mk.scale.y = 0.15;
     mk.scale.z = 0.15;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 0;
     mk.color.a = 0.7;
@@ -1476,7 +1478,7 @@ void LowResMap::Debug2(vector<Eigen::Vector3d> &pts){
     mk.scale.x = 0.1;
     mk.scale.y = 0.1;
     mk.scale.z = 0.1;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = -1;
     mk.color.a = 0.6;
@@ -1502,7 +1504,7 @@ void LowResMap::Debug2(list<Eigen::Vector3d> &pts){
     mk.scale.x = 0.2;
     mk.scale.y = 0.2;
     mk.scale.z = 0.2;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 1;
     mk.color.a = 0.6;
@@ -1527,7 +1529,7 @@ void LowResMap::Debug(const uint32_t &id){
     mk.scale.x = 0.05;
     mk.scale.y = 0.05;
     mk.scale.z = 0.05;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 0;
     mk.color.a = 0.7;
@@ -1577,7 +1579,7 @@ void LowResMap::Debug2(list<list<Eigen::Vector3d>> &paths){
     mk.scale.x = 0.02;
     mk.scale.y = 0.02;
     mk.scale.z = 0.02;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = -1;
     mk.color.a = 0.3;

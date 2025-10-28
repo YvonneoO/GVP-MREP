@@ -871,7 +871,7 @@ void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
     Eigen::Vector4d vp_pose;
     visualization_msgs::MarkerArray mka;
     visualization_msgs::Marker mk1, mk2;
-    mk1.header.frame_id = "world";
+    mk1.header.frame_id = "map";
     mk1.header.stamp = ros::Time::now();
     mk1.id = 1;
     mk1.action = visualization_msgs::Marker::ADD;
@@ -969,7 +969,7 @@ void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
 
 void FrontierGrid::ShowGainDebug(){
     visualization_msgs::Marker mk, mkr1, mkr2;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 1;
     mk.action = visualization_msgs::Marker::ADD;
@@ -1092,7 +1092,7 @@ void FrontierGrid::LoadVpLines(visualization_msgs::Marker &mk, Eigen::Vector4d &
 
 void FrontierGrid::Debug(list<int> &v_ids){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = -1;
     mk.action = visualization_msgs::Marker::ADD;
@@ -1122,7 +1122,7 @@ void FrontierGrid::Debug(list<int> &v_ids){
 
 void FrontierGrid::Debug(list<Eigen::Vector3d> &pts){
     visualization_msgs::Marker mk, mkr1, mkr2;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = scan_count_;
     scan_count_++;
@@ -1153,7 +1153,7 @@ void FrontierGrid::Debug(list<Eigen::Vector3d> &pts){
 
 void FrontierGrid::DebugShowAll(){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = -1;
     // scan_count_++;

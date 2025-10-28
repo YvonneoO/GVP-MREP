@@ -274,7 +274,7 @@ void BlockMap::OdomCallback(const nav_msgs::OdometryConstPtr &odom){
     // debug1.scale.z = resolution_;
     // debug1.color.a = 0.3;
     // debug1.color.r = 1.0;
-    // debug1.header.frame_id = "world";
+    // debug1.header.frame_id = "map";
     // debug1.header.stamp = ros::Time::now();
     // debug1.id = 0;
 
@@ -387,7 +387,7 @@ void BlockMap::ShowMapCallback(const ros::TimerEvent &e){
     mk_stand.scale.y = resolution_;
     mk_stand.scale.z = resolution_;
     mk_stand.color.a = 1.0;
-    mk_stand.header.frame_id = "world";
+    mk_stand.header.frame_id = "map";
     mk_stand.header.stamp = ros::Time::now();
     // mk_stand.id = *block_it;
 
@@ -611,7 +611,8 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             end_point(0) = pcl_it->x;
             end_point(1) = pcl_it->y;
             end_point(2) = pcl_it->z;
-            // end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
+            // Transform from sensor frame to world frame
+            end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
 
             dir = end_point - cam;
             end3i = PostoId3(end_point);            
@@ -991,7 +992,7 @@ void BlockMap::StatisticV(const ros::TimerEvent &e){
 
 void BlockMap::Debug(list<Eigen::Vector3d> &pts, int ddd){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 2 + ddd;
     mk.action = visualization_msgs::Marker::ADD;

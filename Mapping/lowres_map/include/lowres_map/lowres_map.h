@@ -489,6 +489,7 @@ private:
     ColorManager *CM_;
 
     int drone_num_;
+    bool is_ground_robot_;
 };
 
 inline bool LowResMap::GetBlock3Id(const Eigen::Vector3d &pos, Eigen::Vector3i &blkid){
