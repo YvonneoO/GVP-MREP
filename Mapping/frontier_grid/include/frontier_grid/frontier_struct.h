@@ -16,7 +16,7 @@ using namespace std;
 using namespace Eigen;
 
 namespace FrontierGridStruct{
-enum SensorType{LIVOX, CAMERA};
+enum SensorType{LIVOX, CAMERA, OUSTER};
 
 struct CoarseFrontier{
     uint8_t f_state_;                    //0: unexplored; 1:exploring; 2: explored; 

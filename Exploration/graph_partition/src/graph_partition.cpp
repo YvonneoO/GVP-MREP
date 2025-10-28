@@ -941,7 +941,7 @@ void GraphVoronoiPartition::PartitionTimerCallback(const ros::TimerEvent &e){
 void GraphVoronoiPartition::ShowPartition(list<h_ptr> &hn_l){
     visualization_msgs::MarkerArray mka;
     mka.markers.resize(1);
-    mka.markers[0].header.frame_id = "world";
+    mka.markers[0].header.frame_id = "map";
     mka.markers[0].header.stamp = ros::Time::now();
     mka.markers[0].id = 0;
     mka.markers[0].action = visualization_msgs::Marker::ADD;
@@ -964,7 +964,7 @@ void GraphVoronoiPartition::ShowPartition(list<h_ptr> &hn_l){
 
 void GraphVoronoiPartition::Debug(list<Eigen::Vector3d> &fl, int type, int pub_id){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = pub_id;
     mk.action = visualization_msgs::Marker::ADD;

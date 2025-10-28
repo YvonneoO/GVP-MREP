@@ -55,7 +55,7 @@ void Ground::CreateVisModels(){
     vis_models_.markers.resize(5 * SDM_.drone_num_);
     poses_.resize(SDM_.drone_num_);
     for(int i = 0; i < SDM_.drone_num_; i++){
-        vis_models_.markers[i*5 + 0].header.frame_id = "world";
+        vis_models_.markers[i*5 + 0].header.frame_id = "map";
         vis_models_.markers[i*5 + 0].header.stamp = ros::Time::now();
         vis_models_.markers[i*5 + 0].id = i*5 + 0;
         vis_models_.markers[i*5 + 0].action = visualization_msgs::Marker::ADD;
@@ -107,7 +107,7 @@ void Ground::CreateVisModels(){
 void Ground::TrajVisCallback(const ros::TimerEvent &e){
     visualization_msgs::MarkerArray mka;
     mka.markers.resize(SDM_.drone_num_);
-    mka.markers[0].header.frame_id = "world";
+    mka.markers[0].header.frame_id = "map";
     mka.markers[0].header.stamp = ros::Time::now();
     mka.markers[0].action = visualization_msgs::Marker::ADD;
     mka.markers[0].type = visualization_msgs::Marker::SPHERE_LIST;

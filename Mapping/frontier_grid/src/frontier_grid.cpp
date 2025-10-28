@@ -5,6 +5,10 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     std::string ns = ros::this_node::getName();
     string sensor;
     bool show_frontier;
+    nh_private_.param(ns + "/is_ground_robot", 
+        is_ground_robot_, false);
+    nh_private_.param(ns + "/robot_height", 
+        robot_height_, 0.14);
     nh_private_.param(ns + "/Exp/minX", 
         origin_.x(), -10.0);
     nh_private_.param(ns + "/Exp/minY", 
@@ -51,6 +55,10 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         livox_ver_low_, -10/180 * M_PI);
     nh_private_.param(ns + "/Frontier/livox_ver_up", 
         livox_ver_up_, 75/180 * M_PI);    
+    nh_private_.param(ns + "/Frontier/ouster_ver_low", 
+        ouster_ver_low_, -22.5/180 * M_PI);
+    nh_private_.param(ns + "/Frontier/ouster_ver_up", 
+        ouster_ver_up_, 22.5/180 * M_PI);
     nh_private_.param(ns + "/Frontier/ray_samp_dist1", 
         ray_samp_dist1_, 0.2);
     // nh_private_.param(ns + "/Frontier/samp_free_thresh", 
@@ -142,6 +150,10 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         sensor_type_ = LIVOX;
         ROS_WARN("use Livox");
     }
+    else if(sensor == "Ouster"){
+        sensor_type_ = OUSTER;
+        ROS_WARN("use Ouster");
+    }
     else{
         ROS_ERROR("error sensor type!");
         ros::shutdown();
@@ -163,6 +175,12 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
             sample_vdir_sins_.push_back(sin(M_PI * 0.12 / max(samp_v_dir_num_ - 1, 1) * i - M_PI * 0.22 / 2));
             sample_vdir_coses_.push_back(cos(M_PI * 0.12 / max(samp_v_dir_num_ - 1, 1) * i - M_PI * 0.22 / 2));
             sample_v_dirs_.push_back(M_PI * 0.12 / max(samp_v_dir_num_ - 1, 1) * i - M_PI * 0.25 / 2);
+        }
+        else if(sensor_type_ == OUSTER){
+            double ouster_v_fov = (ouster_ver_up_ - ouster_ver_low_); // vertical FOV in radians
+            sample_vdir_sins_.push_back(sin(ouster_v_fov / max(samp_v_dir_num_ - 1, 1) * i + ouster_ver_low_));
+            sample_vdir_coses_.push_back(cos(ouster_v_fov / max(samp_v_dir_num_ - 1, 1) * i + ouster_ver_low_));
+            sample_v_dirs_.push_back(ouster_v_fov / max(samp_v_dir_num_ - 1, 1) * i + ouster_ver_low_);
         }
     }
     for(int i = 0; i < samp_h_dir_num_; i++){
@@ -253,17 +271,17 @@ bool FrontierGrid::SampleVps(list<int> &idxs){
                 alive_num++;
             }
         }
-        if(alive_num < min_vp_num_){
-            f_grid_[idx].f_state_ = 2;
-            if(!f_grid_[idx].flags_[2]){
-                explored_frontiers_show_.push_back(idx);
-                f_grid_[idx].flags_.set(2);
-            }
-            if(use_swarm_&& !SDM_->is_ground_) {
-                SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 1, false); 
-                BM_->SendSwarmBlockMap(idx, false);
-            }
-        }
+        // if(alive_num < min_vp_num_){
+        //     f_grid_[idx].f_state_ = 2;
+        //     if(!f_grid_[idx].flags_[2]){
+        //         explored_frontiers_show_.push_back(idx);
+        //         f_grid_[idx].flags_.set(2);
+        //     }
+        //     if(use_swarm_&& !SDM_->is_ground_) {
+        //         SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 1, false); 
+        //         BM_->SendSwarmBlockMap(idx, false);
+        //     }
+        // }
         else{
             if(use_swarm_ && !dieing_vps.empty()&& !SDM_->is_ground_) SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 0, true); 
         }
@@ -272,6 +290,7 @@ bool FrontierGrid::SampleVps(list<int> &idxs){
 }
 
 void FrontierGrid::UpdateFrontier(const vector<Eigen::Vector3d> &pts){
+    // count unknown voxels, update ft status, propagate to neighboring ft grids
     int idx;
     list<int> idx_list;
 
@@ -302,6 +321,7 @@ void FrontierGrid::UpdateFrontier(const vector<Eigen::Vector3d> &pts){
 
         if(f_grid_[it_idx].f_state_ == 1){
             if(f_grid_[it_idx].unknown_num_ < f_grid_[it_idx].thresh_num_){
+                // set neighboring unexplored ft grids as "exploring"
                 ExpandFrontier(it_idx, true);
                 f_grid_[it_idx].f_state_ = 2;
                 if(use_swarm_ && !SDM_->is_ground_) BM_->SendSwarmBlockMap(it_idx, false);
@@ -342,6 +362,72 @@ double FrontierGrid::GetGain(const int &f_id, const int &vp_id){
         ros::shutdown();
         return -1;
     }
+
+    if(is_ground_robot_){
+        Eigen::Vector3d vp_pos = v_pose.block(0, 0, 3, 1);
+        double yaw = v_pose(3);
+
+        // Ouster sensor parameters (360° horizontal, ~45° vertical)
+        double dtheta = M_PI * 2 / FOV_h_num_;
+        double dphi = (ouster_ver_up_ - ouster_ver_low_) / FOV_v_num_;
+        double sin_2_dphi = sin(dphi / 2);
+
+        Eigen::Vector3d f_scale = (f_grid_[f_id].up_ - f_grid_[f_id].down_) / 2;
+        Eigen::Vector3d f_center = f_grid_[f_id].center_;
+
+        for(int h = 0; h < FOV_h_num_; h++){
+            double h_dir = yaw + double(h) / FOV_h_num_ * M_PI * 2 - M_PI;
+
+            for(int v = 0; v < FOV_v_num_; v++){
+                double v_dir = double(v) / FOV_v_num_ * (ouster_ver_up_ - ouster_ver_low_) + ouster_ver_low_;
+                double cos_phi = cos(v_dir);
+
+                Eigen::Vector3d dir;
+                dir(0) = cos(h_dir) * cos(v_dir);
+                dir(1) = sin(h_dir) * cos(v_dir);
+                dir(2) = sin(v_dir);
+
+                list<Eigen::Vector3d> ray;
+                BM_->GetCastLine(vp_pos, vp_pos + dir * sensor_range_, ray);
+
+                for(auto &p : ray){
+                    // Check if point is inside the frontier grid
+                    bool inside_frontier = true;
+                    for(int dim = 0; dim < 3; dim++){
+                        if(abs(f_center(dim) - p(dim)) > f_scale(dim)){
+                            inside_frontier = false;
+                            break;
+                        }
+                    }
+
+                    state = BM_->GetVoxState(p);
+
+                    // Outside frontier: only check for occlusion
+                    if(!inside_frontier){
+                        if(state == VoxelState::occupied || state == VoxelState::out){
+                            break;
+                        }
+                    }
+                    // Inside frontier: count unknown voxels as gain
+                    else{
+                        if(state == VoxelState::free){
+                            continue;
+                        }
+                        else if(state == VoxelState::occupied || state == VoxelState::out){
+                            break;
+                        }
+                        else{ // unknown voxel
+                            double dist = (p - vp_pos).norm();
+                            gain += 2*dtheta*pow(dist, 2)*sin_2_dphi*cos_phi;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        return gain;
+    }
+
     for(auto &ray : rays){
         vis_free = true;
         for(auto &vox : ray.first){
@@ -446,6 +532,62 @@ void FrontierGrid::InitGainRays(){
                 for(int v = 0; v < FOV_v_num_; v++){
                     bool valid_ray = false;
                     double v_dir = double(v) / FOV_v_num_ * (livox_ver_up_ - livox_ver_low_) + livox_ver_low_;
+                    tr1::unordered_map<int, double> l1;
+                    list<Eigen::Vector3d> ray1;
+                    list<pair<Eigen::Vector3d, double>> ray2;
+                    Eigen::Vector3d dir;
+                    cos_phi = cos(v_dir);
+                    dir(0) = cos(h_dir) * cos(v_dir);
+                    dir(1) = sin(h_dir) * cos(v_dir);
+                    dir(2) = sin(v_dir);
+                    double l_gain = 0;
+                    for(double l = 0; l < sensor_range_; l += ray_samp_dist1_){
+                        Eigen::Vector3d p = dir * l;
+                        Eigen::Vector3d pm = p + vp.block(0, 0, 3, 1);
+                        int id = BM_->PostoId(p);
+                        if(abs(pm.x()) < node_scale_ / 2 && abs(pm.y()) < node_scale_ / 2
+                             && abs(pm.z()) < node_scale_ / 2){
+                            valid_ray = true;
+                            l_gain = l;
+                            break;
+                        }
+                        if(l1.find(id) == l1.end()){
+                            l1.insert(pair<int, double>{id, l});
+                            ray1.push_back(pm);
+                        }
+                    }
+                    tr1::unordered_map<int, double> l2;
+                    for(; l_gain < sensor_range_; l_gain += ray_samp_dist2_){
+                        Eigen::Vector3d p = dir * l_gain;
+                        Eigen::Vector3d pm = p + vp.block(0, 0, 3, 1);
+                        if(abs(pm.x()) > node_scale_ / 2 || abs(pm.y()) > node_scale_ / 2
+                             || abs(pm.z()) > node_scale_ / 2){
+                            break;
+                        }
+                        int id = BM_->PostoId(pm);
+                        if(l2.find(id) == l2.end()){
+                            l2.insert(pair<int, double>{id, l_gain});
+                            double gain = 2*dtheta*pow(l_gain, 2)*sin_2_dphi*cos_phi;
+                            ray2.push_back({pm, gain});
+                        }
+                    }
+                    if(valid_ray && ray2.size() > 0){
+                        gain_rays_[v_id].push_back({ray1, ray2});
+                        gain_dirs_[v_id].push_back({dir * l_gain + vp.block(0, 0, 3, 1), 2*dtheta*sin_2_dphi*cos_phi});
+                    }
+                }
+            }
+        }
+        else if(sensor_type_ == SensorType::OUSTER){
+            // 360° horizontal FOV and 45° vertical FOV (±22.5°)
+            dtheta = M_PI * 2 / FOV_h_num_;
+            dphi = (ouster_ver_up_ - ouster_ver_low_) / FOV_v_num_;
+            sin_2_dphi = sin(dphi / 2);
+            for(int h = 0; h < FOV_h_num_; h++){
+                double h_dir = vp(3) + double(h) / FOV_h_num_ * M_PI * 2 - M_PI;
+                for(int v = 0; v < FOV_v_num_; v++){
+                    bool valid_ray = false;
+                    double v_dir = double(v) / FOV_v_num_ * (ouster_ver_up_ - ouster_ver_low_) + ouster_ver_low_;
                     tr1::unordered_map<int, double> l1;
                     list<Eigen::Vector3d> ray1;
                     list<pair<Eigen::Vector3d, double>> ray2;

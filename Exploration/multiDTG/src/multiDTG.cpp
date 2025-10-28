@@ -724,7 +724,7 @@ void MultiDTG::Show(){
     //     f_n_list.insert(f_n_list.end(), f_l.begin(), f_l.end());
     // }
 
-    mka.markers[0].header.frame_id = "world";
+    mka.markers[0].header.frame_id = "map";
     mka.markers[0].header.stamp = ros::Time::now();
     mka.markers[0].id = 0;
     mka.markers[0].action = visualization_msgs::Marker::ADD;
@@ -760,7 +760,7 @@ void MultiDTG::Show(){
     }
     // cout<<"show en:"<<hh_e_list.size()<<endl;
 
-    mka.markers[1].header.frame_id = "world";
+    mka.markers[1].header.frame_id = "map";
     mka.markers[1].header.stamp = ros::Time::now();
     mka.markers[1].id = 1;
     mka.markers[1].action = visualization_msgs::Marker::ADD;
@@ -786,7 +786,7 @@ void MultiDTG::Show(){
         // }
     }
 
-    mka.markers[2].header.frame_id = "world";
+    mka.markers[2].header.frame_id = "map";
     mka.markers[2].header.stamp = ros::Time::now();
     mka.markers[2].id = 2;
     mka.markers[2].action = visualization_msgs::Marker::ADD;
@@ -836,7 +836,7 @@ void MultiDTG::Show(){
         // }
     }
 
-    mka.markers[3].header.frame_id = "world";
+    mka.markers[3].header.frame_id = "map";
     mka.markers[3].header.stamp = ros::Time::now();
     mka.markers[3].id = 3;
     mka.markers[3].action = visualization_msgs::Marker::ADD;
@@ -905,7 +905,7 @@ void MultiDTG::Show(){
 
     }
 
-    mka.markers[4].header.frame_id = "world";
+    mka.markers[4].header.frame_id = "map";
     mka.markers[4].header.stamp = ros::Time::now();
     mka.markers[4].id = 4;
     mka.markers[4].action = visualization_msgs::Marker::ADD;
@@ -952,7 +952,7 @@ void MultiDTG::Show(){
         }
     }
 
-    mka.markers[5].header.frame_id = "world";
+    mka.markers[5].header.frame_id = "map";
     mka.markers[5].header.stamp = ros::Time::now();
     mka.markers[5].id = 5;
     mka.markers[5].action = visualization_msgs::Marker::ADD;
@@ -1037,7 +1037,7 @@ void MultiDTG::Debug(){
 
 void MultiDTG::Debug(list<Eigen::Vector3d> &fl){
     visualization_msgs::Marker mk;
-    mk.header.frame_id = "world";
+    mk.header.frame_id = "map";
     mk.header.stamp = ros::Time::now();
     mk.id = 0;
     mk.action = visualization_msgs::Marker::ADD;
