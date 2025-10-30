@@ -611,7 +611,8 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             end_point(0) = pcl_it->x;
             end_point(1) = pcl_it->y;
             end_point(2) = pcl_it->z;
-            // end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
+            // Transform from sensor frame to world frame
+            end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
 
             dir = end_point - cam;
             end3i = PostoId3(end_point);            
@@ -664,6 +665,10 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
                 }
             }
         }
+
+        std::list<Eigen::Vector3d> debug_pts(cur_pcl_.begin(), cur_pcl_.end());
+        Debug(debug_pts, 10);
+
         Eigen::Vector3d p_it;
         for(block_it = block_ids.begin(), vox_it = vox_ids.begin(); block_it != block_ids.end(); block_it++, vox_it++){
             float odds_origin = GBS_[*block_it]->odds_log_[*vox_it];

@@ -38,6 +38,7 @@ Frontier/min_vp_num: 6 # min alive vps in a ft grid to remain exploring (infeasi
 block_map/RobotVisX: 1.2
 block_map/RobotVisY: 0.8
 block_map/RobotVisZ: 0.8
+block_map/bline_occ_range: 0.8
 block_map/swarm_tol: 0.3 # time tolerance for robot pose timestamp
 block_map/swarm_send_delay: 2.0 # delay time to send map info
 block_map/swarm_pub_thresh: 0.975 # map sharing threshold
@@ -75,7 +76,7 @@ block_map/vis_mode: true
 block_map/min_finish_t: 45.0
 
 Exp/show_swarm_traj: false
-EXP/finish_hold_duration: 15.0
+EXP/finish_hold_duration: 15.0 # confirmation period before terminating exploration
 Exp/robot_sizeX: 1.2
 Exp/robot_sizeY: 0.8
 Exp/robot_sizeZ: 0.8
@@ -85,12 +86,12 @@ Exp/minZ: -0.1
 Exp/maxX: 25.0
 Exp/maxY: 25.0
 Exp/maxZ: 5.5
-Exp/traj_length: 10.0
+Exp/traj_length: 10.0 # max path length to be considered for corridor generation
 Exp/local_path_search: 1000
 Exp/global_path_search: 3000
-Exp/strong_check_interval: 3.0
-Exp/check_duration: 3.5
-Exp/exc_duration: 0.5
+Exp/strong_check_interval: 3.0 # vp strong check interval
+Exp/check_duration: 3.5 # traj collision check time window
+Exp/exc_duration: 0.5 # min exc time before replanning
 Exp/replan_duration: 1.5
 Exp/takeoff_x: 0.0
 Exp/takeoff_y: 0.0
@@ -100,9 +101,9 @@ Exp/reach_out_t: 0.1
 Exp/AutoTakeoff: true
 Exp/acc_off: -0.5
 Exp/statistic: true
-Exp/finish_thresh: 0.5
+Exp/finish_thresh: 1.0 # percentage of finished robots to trigger exp termination
 Exp/swarm_check: true
-Exp/colli_range: 0.75
+Exp/colli_range: 0.75 # pose collision inflation radius
 #swarm
 # Exp/UAV_id: 1
 # Exp/drone_num: 1
@@ -110,15 +111,17 @@ Exp/local_comm_freq: 10.0
 Exp/global_comm_freq: 0.5
 Exp/local_dist_thresh: 7.0
 
+# h node allocation
 GVD/show_gvd: false
-GVD/lambda: 0.1
-GVD/allowance: 0.08
-GVD/tau: 0.2
+GVD/lambda: 0.1 # distance penalty weight
+GVD/allowance: 0.08 # frontier bonus factor
+GVD/tau: 0.2 # redundancy penalty weight (for workload balance)
 GVD/partition_frequency: 0.33
 
 MR_DTG/Toporange: 10.0
 MR_DTG/H_thresh: 5.5
 MR_DTG/update_FF: false
+# h / f node resolution
 MR_DTG/resX: 2.0
 MR_DTG/resY: 2.0
 MR_DTG/resZ: 2.0
@@ -135,7 +138,7 @@ LowResMap/node_z: 0.6
 LowResMap/blockX: 5
 LowResMap/blockY: 5
 LowResMap/blockZ: 3
-LowResMap/showmap: false
+LowResMap/showmap: true
 LowResMap/debug: true
 LowResMap/lambda_heu: 5.0 # A* heuristic weight
 LowResMap/resolution: 0.1 # voxel size => block map res

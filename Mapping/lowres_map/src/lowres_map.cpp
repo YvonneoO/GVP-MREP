@@ -71,6 +71,7 @@ void LowResMap::init(const ros::NodeHandle &nh,
     nh_private_.param(ns + "/block_map/unknown_duration", 
         unknown_duration_, 0.5);
     nh_private.param(ns + "/Exp/drone_num", drone_num_, 1);
+    nh_private.param(ns + "/LowResMap/is_ground_robot", is_ground_robot_, false);
 
     //pub
     if(showmap_){

@@ -578,6 +578,62 @@ void FrontierGrid::InitGainRays(){
                 }
             }
         }
+        else if(sensor_type_ == SensorType::OUSTER){
+            // 360° horizontal FOV and 45° vertical FOV (±22.5°)
+            dtheta = M_PI * 2 / FOV_h_num_;
+            dphi = (ouster_ver_up_ - ouster_ver_low_) / FOV_v_num_;
+            sin_2_dphi = sin(dphi / 2);
+            for(int h = 0; h < FOV_h_num_; h++){
+                double h_dir = vp(3) + double(h) / FOV_h_num_ * M_PI * 2 - M_PI;
+                for(int v = 0; v < FOV_v_num_; v++){
+                    bool valid_ray = false;
+                    double v_dir = double(v) / FOV_v_num_ * (ouster_ver_up_ - ouster_ver_low_) + ouster_ver_low_;
+                    tr1::unordered_map<int, double> l1;
+                    list<Eigen::Vector3d> ray1;
+                    list<pair<Eigen::Vector3d, double>> ray2;
+                    Eigen::Vector3d dir;
+                    cos_phi = cos(v_dir);
+                    dir(0) = cos(h_dir) * cos(v_dir);
+                    dir(1) = sin(h_dir) * cos(v_dir);
+                    dir(2) = sin(v_dir);
+                    double l_gain = 0;
+                    for(double l = 0; l < sensor_range_; l += ray_samp_dist1_){
+                        Eigen::Vector3d p = dir * l;
+                        Eigen::Vector3d pm = p + vp.block(0, 0, 3, 1);
+                        int id = BM_->PostoId(p);
+                        if(abs(pm.x()) < node_scale_ / 2 && abs(pm.y()) < node_scale_ / 2
+                             && abs(pm.z()) < node_scale_ / 2){
+                            valid_ray = true;
+                            l_gain = l;
+                            break;
+                        }
+                        if(l1.find(id) == l1.end()){
+                            l1.insert(pair<int, double>{id, l});
+                            ray1.push_back(pm);
+                        }
+                    }
+                    tr1::unordered_map<int, double> l2;
+                    for(; l_gain < sensor_range_; l_gain += ray_samp_dist2_){
+                        Eigen::Vector3d p = dir * l_gain;
+                        Eigen::Vector3d pm = p + vp.block(0, 0, 3, 1);
+                        if(abs(pm.x()) > node_scale_ / 2 || abs(pm.y()) > node_scale_ / 2
+                             || abs(pm.z()) > node_scale_ / 2){
+                            break;
+                        }
+                        int id = BM_->PostoId(pm);
+                        if(l2.find(id) == l2.end()){
+                            l2.insert(pair<int, double>{id, l_gain});
+                            double gain = 2*dtheta*pow(l_gain, 2)*sin_2_dphi*cos_phi;
+                            ray2.push_back({pm, gain});
+                        }
+                    }
+                    if(valid_ray && ray2.size() > 0){
+                        gain_rays_[v_id].push_back({ray1, ray2});
+                        gain_dirs_[v_id].push_back({dir * l_gain + vp.block(0, 0, 3, 1), 2*dtheta*sin_2_dphi*cos_phi});
+                    }
+                }
+            }
+        }
         else{
             ROS_ERROR("InitGainRays1");
             ros::shutdown();
@@ -741,6 +797,7 @@ void FrontierGrid::LazySampleCallback(const ros::TimerEvent &e){
     }
 }
 
+// ????? TODO: fix gain calculation for ground robot
 bool FrontierGrid::StrongCheckViewpoint(const int &f_id, const int &v_id, const bool &allow_unknown){
     Eigen::Vector4d vp_pose;
     if(!GetVp(f_id, v_id, vp_pose)) return false;

@@ -18,9 +18,9 @@
         <param name="Exp/takeoff_z" value="$(arg init_z)" />
 
         <!-- LiDAR inputs -->
-        <remap from="/pointcloud" to="/point_cloud_ugv_$(arg id)"/>
-        <remap from="/odom" to="/odom_ugv_$(arg id)"/>
-        <remap from="/vi_odom" to="/odom_ugv_$(arg id)"/>
+        <remap from="/pointcloud" to="/point_cloud_ugv_$(arg id)_world"/>
+        <remap from="/odom" to="/odom_ugv_$(arg id)_world"/>
+        <remap from="/vi_odom" to="/odom_ugv_$(arg id)_world"/>
 
         <!-- Depth camera topics not used for Ouster -->
         <!-- <remap from="/depth" to="/depth_ugv_$(arg id)"/> -->
