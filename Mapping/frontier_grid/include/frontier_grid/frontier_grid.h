@@ -210,6 +210,9 @@ private:
     void Debug(list<Eigen::Vector3d> &pts);
     void Debug(list<int> &v_ids);
 
+    bool is_ground_robot_;
+    double robot_height_;
+
     Eigen::Vector3d Robot_size_;
     Eigen::Vector3i node_num_;
     Eigen::Vector3d origin_, up_bd_;
@@ -229,6 +232,7 @@ private:
     int FOV_h_num_, FOV_v_num_; 
     double cam_hor_, cam_ver_;
     double livox_ver_low_, livox_ver_up_;
+    double ouster_ver_low_, ouster_ver_up_;
     double ray_samp_dist1_, ray_samp_dist2_;
 
     vector<double> sample_dists_, sample_h_dirs_, sample_v_dirs_;
@@ -400,6 +404,9 @@ inline bool FrontierGrid::GetVpPos(const int &f_idx, const int &v_id, Eigen::Vec
         v_pos(2) = length * vdir_sin + f_grid_[f_idx].center_(2);
         v_pos(1) = length * vdir_cos * hdir_sin + f_grid_[f_idx].center_(1);
         v_pos(0) = length * vdir_cos * hdir_cos + f_grid_[f_idx].center_(0);
+
+        // for ground robot, set vp height to the robot height
+        if(is_ground_robot_) v_pos(2) = robot_height_;
         return true;
 }
 
@@ -422,6 +429,9 @@ inline bool FrontierGrid::GetVp(const int &f_idx, const int &v_id, Eigen::Vector
         v_pose(2) = length * vdir_sin + f_grid_[f_idx].center_(2);
         v_pose(1) = length * vdir_cos * hdir_sin + f_grid_[f_idx].center_(1);
         v_pose(0) = length * vdir_cos * hdir_cos + f_grid_[f_idx].center_(0);
+
+        // for ground robot, set vp height to the robot height
+        if(is_ground_robot_) v_pose(2) = robot_height_;
         return true;
     // }
     // else return false;
@@ -443,6 +453,9 @@ inline bool FrontierGrid::GetVp(const Eigen::Vector3d &f_center, const int &v_id
     v_pose(2) = length * vdir_sin + f_center(2);
     v_pose(1) = length * vdir_cos * hdir_sin + f_center(1);
     v_pose(0) = length * vdir_cos * hdir_cos + f_center(0);
+
+    // for ground robot, set vp height to the robot height
+    if(is_ground_robot_) v_pose(2) = robot_height_;
     return true;
 }
 

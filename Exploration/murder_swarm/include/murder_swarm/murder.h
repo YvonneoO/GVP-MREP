@@ -24,6 +24,7 @@
 #include <swarm_exp_msgs/LocalTraj.h>
 #include <nav_msgs/Odometry.h>
 #include <sensor_msgs/Image.h>
+#include <nav_msgs/Path.h>
 
 #include <message_filters/subscriber.h>
 #include <message_filters/sync_policies/approximate_time.h>
@@ -130,6 +131,7 @@ private:
             const double &yde, const double &ydde, const Eigen::Vector3d &gazept,bool gaze = false);
     void GetFollowPath(list<Eigen::Vector3d> &path, list<Eigen::Vector3d> &path_follow);
     void PublishTraj(bool recover);
+    void PublishSparseWaypoints(const vector<Eigen::Vector3d> &path, const Eigen::Vector3d &end_pos, double end_yaw);
     bool SwarmFeasiCheck();
     void Debug(const Eigen::Vector3d &pt1, const Eigen::Vector3d &pt2);
     void Debug(list<Eigen::Vector3d> &pts);
@@ -142,7 +144,7 @@ private:
     FrontierGrid FG_;
     ColorManager CM_;
 
-    ros::Publisher show_pub_, traj_pub_, posevis_pub_;
+    ros::Publisher show_pub_, traj_pub_, posevis_pub_, sparse_waypoints_pub_;
     ros::Subscriber odom_sub_;
     ros::NodeHandle nh_, nh_private_;
 

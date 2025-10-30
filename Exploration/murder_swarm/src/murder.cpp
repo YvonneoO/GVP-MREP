@@ -91,6 +91,7 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     show_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "/Murder/Show", 5);
     // posevis_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "Murder/PoseVis", 1);
     traj_pub_ = nh_.advertise<swarm_exp_msgs::LocalTraj>("/Murder/Traj", 1);
+    sparse_waypoints_pub_ = nh_.advertise<nav_msgs::Path>("/ugv/sparse_waypoints", 10);
 }
 
 void Murder::BroadCastFinish(){
@@ -951,6 +952,9 @@ bool Murder::TrajPlanB(const Eigen::Vector3d &ps, const Eigen::Vector3d &vs, con
     if(LRM_.GetPath(ps, pe, path, false, local_max_search_iter_)){
 
         if(LRM_.FindCorridors(path, h, p, path_pruned, traj_length_)){
+            // Publish sparse waypoints for UGV before trajectory optimization
+            PublishSparseWaypoints(path_pruned, pe, ype);
+
             Eigen::Matrix3d startpva, endpva;
             double min_t = YawP_.GetMinT(yps, ype) - 1e-3;
             startpva.setZero();
@@ -1098,6 +1102,57 @@ void Murder::PublishTraj(bool recover){
     }
     SDM_.SetTraj(TrajOpt_.traj, traj_start_t_);
     traj_pub_.publish(traj);
+}
+
+void Murder::PublishSparseWaypoints(const vector<Eigen::Vector3d> &path,
+    const Eigen::Vector3d &end_pos, double end_yaw){
+    nav_msgs::Path waypoint_msg;
+    waypoint_msg.header.frame_id = "world";
+    waypoint_msg.header.stamp = ros::Time::now();
+
+    // Add current position as first waypoint
+    geometry_msgs::PoseStamped pose;
+    pose.header.frame_id = "world";
+    pose.header.stamp = ros::Time::now();
+    pose.pose.position.x = p_.x();
+    pose.pose.position.y = p_.y();
+    pose.pose.position.z = p_.z();
+    pose.pose.orientation.w = cos(yaw_ / 2.0);
+    pose.pose.orientation.x = 0.0;
+    pose.pose.orientation.y = 0.0;
+    pose.pose.orientation.z = sin(yaw_ / 2.0);
+    waypoint_msg.poses.push_back(pose);
+
+    // Add path waypoints
+    for(size_t i = 0; i < path.size(); i++){
+        pose.header.stamp = ros::Time::now();
+        pose.pose.position.x = path[i].x();
+        pose.pose.position.y = path[i].y();
+        pose.pose.position.z = p_.z();  // Convert to robot height
+
+        // Calculate yaw as direction to next point
+        double yaw;
+        if(i < path.size() - 1){
+            // Point to next waypoint
+            yaw = atan2(path[i+1].y() - path[i].y(), path[i+1].x() - path[i].x());
+        } else {
+            // Last waypoint: use end yaw or point to end position
+            if((end_pos - path[i]).norm() > 0.1){
+                yaw = atan2(end_pos.y() - path[i].y(), end_pos.x() - path[i].x());
+            } else {
+                yaw = end_yaw;
+            }
+        }
+
+        pose.pose.orientation.w = cos(yaw / 2.0);
+        pose.pose.orientation.x = 0.0;
+        pose.pose.orientation.y = 0.0;
+        pose.pose.orientation.z = sin(yaw / 2.0);
+        waypoint_msg.poses.push_back(pose);
+    }
+
+    sparse_waypoints_pub_.publish(waypoint_msg);
+    ROS_INFO("Published %lu sparse waypoints for UGV", waypoint_msg.poses.size());
 }
 
 void Murder::ImgOdomCallback(const sensor_msgs::ImageConstPtr& img,
