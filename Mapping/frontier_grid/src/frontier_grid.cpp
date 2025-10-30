@@ -271,17 +271,17 @@ bool FrontierGrid::SampleVps(list<int> &idxs){
                 alive_num++;
             }
         }
-        // if(alive_num < min_vp_num_){
-        //     f_grid_[idx].f_state_ = 2;
-        //     if(!f_grid_[idx].flags_[2]){
-        //         explored_frontiers_show_.push_back(idx);
-        //         f_grid_[idx].flags_.set(2);
-        //     }
-        //     if(use_swarm_&& !SDM_->is_ground_) {
-        //         SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 1, false); 
-        //         BM_->SendSwarmBlockMap(idx, false);
-        //     }
-        // }
+        if(alive_num < min_vp_num_){
+            f_grid_[idx].f_state_ = 2;
+            if(!f_grid_[idx].flags_[2]){
+                explored_frontiers_show_.push_back(idx);
+                f_grid_[idx].flags_.set(2);
+            }
+            if(use_swarm_&& !SDM_->is_ground_) {
+                SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 1, false); 
+                BM_->SendSwarmBlockMap(idx, false);
+            }
+        }
         else{
             if(use_swarm_ && !dieing_vps.empty()&& !SDM_->is_ground_) SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 0, true); 
         }

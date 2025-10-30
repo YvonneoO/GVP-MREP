@@ -742,10 +742,12 @@ inline shared_ptr<LR_node> LowResMap::GetNode(const Eigen::Vector3d &pos){
             return GetNode(pos, fp_ptr);
         }
         else{
+            ROS_ERROR("GetNode: blockid %d is NULL", blockid);
             return NULL;
         }
     }
     else{
+        ROS_ERROR("GetNode: pos %f, %f, %f is out of map", pos(0), pos(1), pos(2));
         return Outnode_;
     }
 }

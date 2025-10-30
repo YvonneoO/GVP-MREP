@@ -144,6 +144,7 @@ private:
     void InsertPCLCallback(const sensor_msgs::PointCloud2ConstPtr &pcl);
     void InsertDepthCallback(const sensor_msgs::ImageConstPtr &img);
     void CamParamCallback(const sensor_msgs::CameraInfoConstPtr &param);
+    void setCamParam();
 
     //Timer
     void ShowMapCallback(const ros::TimerEvent &e);
@@ -225,6 +226,7 @@ private:
     vector<FFD_Grid> downsampled_img_;  //FFD
     //detect frontier flag
     bool depth_;
+    bool setCamParam_;
     bool have_odom_, have_cam_param_, show_block_;
     double last_update_, update_interval_, show_freq_, last_odom_;
     //blocks to be shown

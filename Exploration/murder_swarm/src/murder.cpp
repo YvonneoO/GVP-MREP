@@ -91,7 +91,7 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     show_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "/Murder/Show", 5);
     // posevis_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "Murder/PoseVis", 1);
     traj_pub_ = nh_.advertise<swarm_exp_msgs::LocalTraj>("/Murder/Traj", 1);
-    sparse_waypoint_pub_ = nh_.advertise<nav_msgs::Path>("/ugv/sparse_waypoints", 10);
+    sparse_waypoint_pub_ = nh_.advertise<nav_msgs::Path>(ns + "/sparse_waypoints", 10);
 }
 
 void Murder::BroadCastFinish(){

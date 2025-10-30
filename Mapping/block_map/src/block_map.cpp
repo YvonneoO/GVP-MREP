@@ -43,6 +43,20 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         max_range_, 4.5);
     nh_private_.param(ns + "/block_map/depth", 
         depth_, false);
+    nh_private_.param(ns + "/block_map/setCamParam", 
+        setCamParam_, false);
+    nh_private_.param(ns + "/block_map/fx", 
+        fx_, 320.0);
+    nh_private_.param(ns + "/block_map/fy", 
+        fy_, 320.0);
+    nh_private_.param(ns + "/block_map/cx", 
+        cx_, 320.0);
+    nh_private_.param(ns + "/block_map/cy", 
+        cy_, 240.0);
+    nh_private_.param(ns + "/block_map/u_max", 
+        u_max_, 640);
+    nh_private_.param(ns + "/block_map/v_max", 
+        v_max_, 480);
     nh_private_.param(ns + "/block_map/CamtoBody_Quater_x",
         cam2bodyrot.x(), 0.0);
     nh_private_.param(ns + "/block_map/CamtoBody_Quater_y",
@@ -241,7 +255,12 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         statistic_timer_ = nh.createTimer(ros::Duration(0.5), &BlockMap::StatisticV, this);
     }
     if(depth_){
-        camparam_sub_ = nh_.subscribe("/block_map/caminfo", 10, &BlockMap::CamParamCallback, this);
+        if (setCamParam_){
+            setCamParam();
+        }
+        else{
+            camparam_sub_ = nh_.subscribe("/block_map/caminfo", 10, &BlockMap::CamParamCallback, this);
+        }
     }
     if(show_block_)
         show_timer_ = nh_.createTimer(ros::Duration(1.0 / show_freq_), &BlockMap::ShowMapCallback, this);
@@ -376,6 +395,36 @@ void BlockMap::CamParamCallback(const sensor_msgs::CameraInfoConstPtr &param){
     camparam_sub_.shutdown();
 }
 
+void BlockMap::setCamParam(){
+    have_cam_param_ = true;
+
+    downsample_size_ = (int)floor(resolution_ * fx_ / max_range_);
+    downsample_size_ = min((int)floor(resolution_ * fy_ / max_range_), downsample_size_);
+
+    u_down_max_ = (int)floor((u_max_) / downsample_size_);
+    v_down_max_ = (int)floor((v_max_) / downsample_size_);
+    u_max_ = u_down_max_ * downsample_size_;
+    v_max_ = v_down_max_ * downsample_size_;
+    // depth_step_ = min(depth_step_, downsample_size_);
+    cout<<"fx_:"<<fx_<<endl;
+    cout<<"fy_:"<<fy_<<endl;
+    cout<<"cx_:"<<cx_<<endl;
+    cout<<"cy_:"<<cy_<<endl;
+    cout<<"depth_step_:"<<depth_step_<<endl;
+    cout<<"u_down_max_:"<<u_down_max_<<endl;
+    cout<<"v_down_max_:"<<v_down_max_<<endl;
+    cout<<"downsample_size_:"<<downsample_size_<<endl;
+    downsampled_img_.resize(u_down_max_ * v_down_max_);
+    for(int u = 0; u < u_down_max_; u++){
+        for(int v = 0; v < v_down_max_; v++){
+            Eigen::Vector3d pt(((u + 0.5) * downsample_size_ - cx_) * max_range_ / fx_,((v + 0.5) * downsample_size_ - cy_) * max_range_ / fy_, max_range_);
+            pt = pt.normalized() * max_range_;
+            downsampled_img_[u + v*u_down_max_].max_depth_ = pt.z();
+            downsampled_img_[u + v*u_down_max_].close_depth_ = pt.z();
+
+        }
+    }
+}
 
 void BlockMap::ShowMapCallback(const ros::TimerEvent &e){
     visualization_msgs::MarkerArray mks;
@@ -611,6 +660,12 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             end_point(0) = pcl_it->x;
             end_point(1) = pcl_it->y;
             end_point(2) = pcl_it->z;
+
+            // prevent adding points of the robot body
+            if (end_point.norm() < bline_occ_range_/2) {
+                continue;
+            }
+
             // Transform from sensor frame to world frame
             end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
 
@@ -665,6 +720,10 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
                 }
             }
         }
+
+        std::list<Eigen::Vector3d> debug_pts(cur_pcl_.begin(), cur_pcl_.end());
+        Debug(debug_pts, 10);
+
         Eigen::Vector3d p_it;
         for(block_it = block_ids.begin(), vox_it = vox_ids.begin(); block_it != block_ids.end(); block_it++, vox_it++){
             float odds_origin = GBS_[*block_it]->odds_log_[*vox_it];
@@ -708,6 +767,7 @@ void BlockMap::InsertImg(const sensor_msgs::ImageConstPtr &depth){
     newly_register_idx_.clear();
 
     if(InsideMap(cam3i)){
+        // ROS_WARN("camera pos %f, %f, %f inside map, start insert img", cam2world_(0), cam2world_(1), cam2world_(2));
         LoadSwarmFilter();
         double pix_depth;
         int downsamp_u, downsamp_v, downsamp_nex_u, downsamp_nex_v, downsamp_idx;
@@ -853,7 +913,9 @@ void BlockMap::InsertImg(const sensor_msgs::ImageConstPtr &depth){
             }
         }
     }
-    // Debug();
+    std::list<Eigen::Vector3d> debug_pts(cur_pcl_.begin(), cur_pcl_.end());
+    ROS_WARN("debug_pts size: %d", debug_pts.size());
+    Debug(debug_pts, 10);
 }
 
 void BlockMap::ProjectToImg(const sensor_msgs::PointCloud2ConstPtr &pcl, vector<double> &depth_img){
@@ -1019,7 +1081,7 @@ void BlockMap::Debug(list<Eigen::Vector3d> &pts, int ddd){
     mk.color.a = 0.5;
     geometry_msgs::Point pt;
     if(!finish_flag_) mk.lifetime = ros::Duration(1.0);
-    ROS_WARN("id:%d Debug", SDM_->self_id_);
+    // ROS_WARN("id:%d Debug", SDM_->self_id_);
     for(auto &p : pts){
         // Eigen::Vector3d p = IdtoPos(p_id.first);
         pt.x = p(0);

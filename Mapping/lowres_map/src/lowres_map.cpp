@@ -243,15 +243,15 @@ void LowResMap::ExpandLocalMap(){
     std::list<int> TSList, NTSList;
     if(Rootnode_ == NULL){
         NTSList.push_back(nodeid);
-        std::cout <<Robot_pos_.transpose()<<"\033[0;34m New root \033[0m" << std::endl;
+        std::cout << "[ExpandLocalMap] " << Robot_pos_.transpose()<<"\033[0;34m New root \033[0m" << std::endl;
         SetEXPNode(Robot_pos_);
     }
     else if(Rootnode_ == Outnode_){
-        std::cout <<Robot_pos_.transpose()<<"\033[0;31m Outside!!!!! \033[0m" << std::endl;
+        std::cout << "[ExpandLocalMap] " << Robot_pos_.transpose()<<"\033[0;31m Outside!!!!! \033[0m" << std::endl;
         return;
     }
     else if(Rootnode_->flags_[0]){
-        std::cout <<Robot_pos_.transpose()<<"\033[0;31m collide!!!!! \033[0m" << std::endl;
+        std::cout << "[ExpandLocalMap] " << Robot_pos_.transpose()<<"\033[0;31m collide!!!!! \033[0m" << std::endl;
         return;
     }
     else{
@@ -321,15 +321,15 @@ void LowResMap::ExpandTopoMap(){
 
     if(Rootnode_ == NULL){
         open_NTS_.push(c_node);
-        std::cout <<Robot_pos_.transpose()<<"\033[0;34m New root \033[0m" << std::endl;
+        std::cout << "[ExpandTopoMap] " << Robot_pos_.transpose()<<"\033[0;34m New root \033[0m" << std::endl;
         SetTopoNode(Robot_pos_, Rootnode_, c_node);
     }
     else if(Rootnode_ == Outnode_){
-        std::cout <<Robot_pos_.transpose()<<"\033[0;31m Outside!!!!! \033[0m" << std::endl;
+        std::cout << "[ExpandTopoMap] " << Robot_pos_.transpose()<<"\033[0;31m Outside!!!!! \033[0m" << std::endl;
         return;
     }
     else if(Rootnode_->flags_[0]){
-        std::cout <<Robot_pos_.transpose()<<"\033[0;31m collide!!!!! \033[0m" << std::endl;
+        std::cout << "[ExpandTopoMap] " << Robot_pos_.transpose()<<"\033[0;31m collide!!!!! \033[0m" << std::endl;
         return;
     }
     else{
