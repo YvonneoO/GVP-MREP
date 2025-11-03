@@ -232,19 +232,23 @@ void MultiDTG::Update(const Eigen::Matrix4d &robot_pose, bool clear_x){
     root_ = NULL;
 
     if(LRM_->UpdateLocalTopo(robot_pose, BM_->cur_pcl_, clear_x)){
-        if(!LRM_->IsFeasible(robot_pos)){//debug
+        if(!LRM_->IsFeasible(robot_pos, true)){//debug
             ROS_WARN("id:%d Infeasible1! DTG refuse to update!", SDM_->self_id_);
             return;
         }
         
         //generate new Hnode
         root_ = CreateHnode(robot_pos);
+        ROS_INFO("id:%d CreateHnode success", SDM_->self_id_);
+        ROS_WARN("id:%d CreateHnode success", SDM_->self_id_);
         if(root_ == NULL){
             ROS_WARN("id:%d Infeasible2! DTG refuse to update!", SDM_->self_id_);
             return;
         }
     }
     else{
+        ROS_INFO("id:%d UpdateLocalTopo failed", SDM_->self_id_);
+        ROS_WARN("id:%d UpdateLocalTopo failed", SDM_->self_id_);
         if(!GetVoxBBX(LRM_->cur_root_h_idx_, LRM_->node_scale_, LRM_->cur_root_h_id_, root_)){
             cout<<LRM_->cur_root_h_idx_.transpose()<<":"<<LRM_->cur_root_h_id_<<";"<<LRM_->prep_idx_<<endl;
             ROS_ERROR("error root h!");

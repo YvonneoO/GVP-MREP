@@ -31,7 +31,7 @@ Frontier/ouster_ver_low: -0.384 # vertical FOV down limit
 
 Frontier/ray_samp_dist1: 0.2 # 1st raycasting step size -> determine ft boundary
 Frontier/ray_samp_dist2: 0.1 # finer raycasting step size -> info gain calc
-Frontier/show_frontier: false # show vps in rviz
+Frontier/show_frontier: true # show vps in rviz
 Frontier/min_vp_num: 6 # min alive vps in a ft grid to remain exploring (infeasible to complete or not worth completing)
 
 # filter point cloud for robot body
@@ -47,7 +47,7 @@ block_map/minY: -25.0
 block_map/minZ: -0.1
 block_map/maxX: 25.0
 block_map/maxY: 25.0
-block_map/maxZ: 5.5
+block_map/maxZ: 6
 block_map/blockX: 15
 block_map/blockY: 15
 block_map/blockZ: 15
@@ -56,7 +56,7 @@ block_map/sensor_max_range: 8.0
 block_map/FFD: false # not used
 block_map/depth: false # subscribe to cam info
 block_map/update_freq: 10.0
-block_map/show_freq: 0.0
+block_map/show_freq: 10.0
 block_map/depth_step: 2 # img downsample step
 # sensor2body transform
 block_map/CamtoBody_Quater_x: 0.0
@@ -71,7 +71,7 @@ block_map/occ_min: 0.20
 block_map/pro_hit_occ: 0.90
 block_map/pro_miss_free: 0.75
 block_map/statistic_v: true
-block_map/show_block: false
+block_map/show_block: true
 block_map/vis_mode: true
 block_map/min_finish_t: 45.0
 
@@ -85,7 +85,7 @@ Exp/minY: -25.0
 Exp/minZ: -0.1
 Exp/maxX: 25.0
 Exp/maxY: 25.0
-Exp/maxZ: 5.5
+Exp/maxZ: 6
 Exp/traj_length: 10.0 # max path length to be considered for corridor generation
 Exp/local_path_search: 1000
 Exp/global_path_search: 3000
@@ -170,7 +170,7 @@ opt/integralIntervs: 16
 opt/RelCostTolL: 1.0e-5
 
 Computation/data_num: 3
-Computation/dir: /home/yqqy/GVP-MREP/src/GVP-MREP/data/mUGV/891office
+Computation/dir: /home/yqqy/GVP-MREP/src/GVP-MREP/data/UGV/891office
 Computation/data_name0: gvp
 Computation/data_name1: local
 Computation/data_name2: global

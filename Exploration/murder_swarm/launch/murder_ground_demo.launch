@@ -4,7 +4,7 @@
     <arg name="use_rviz" value="false" />
     <arg name="world"/>
 
-    <node name="ground_node" pkg="murder_swarm" type="ground_node" output="screen">
+    <node name="ground_node" pkg="murder_swarm" type="ground_node" output="log">
         <rosparam command="load" file="$(find block_map)/color/Paranoid.yaml" />
         <rosparam command="load" file="$(find murder_swarm)/resource/murder_$(arg world)_ground.yaml" />
         <rosparam command="load" file="$(find block_map)/color/color_id.yaml" />

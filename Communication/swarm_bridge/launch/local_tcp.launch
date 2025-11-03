@@ -45,9 +45,9 @@
     <param name="is_ground_station" value="true"/>
 
     <param name="computer_num"  value="1"/>
-    <param name="drone_num"  value="3"/>
+    <param name="drone_num"  value="2"/>
 
-    <param name="sim_ip_1" value="192.168.168.201" type="string"/>
+    <param name="sim_ip_1" value="127.0.0.1" type="string"/>
     <param name="sim_num_1" value="$(arg sim_num)"/>
 
     <!-- <param name="drone_ip_2" value="192.168.168.200" type="string"/> -->

@@ -144,15 +144,17 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     // //FOV down sample
     if(sensor == "Depth_Camera"){
         sensor_type_ = CAMERA;
-        ROS_WARN("use camera");
+        ROS_WARN("FG use camera");
     }
     else if(sensor == "Livox"){
         sensor_type_ = LIVOX;
-        ROS_WARN("use Livox");
+        ROS_WARN("FG use Livox");
     }
     else if(sensor == "Ouster"){
         sensor_type_ = OUSTER;
-        ROS_WARN("use Ouster");
+        if (!SDM_->is_ground_){
+            ROS_WARN("FG use Ouster");
+        }
     }
     else{
         ROS_ERROR("error sensor type!");
@@ -817,49 +819,113 @@ bool FrontierGrid::StrongCheckViewpoint(const int &f_id, const int &v_id, const 
     //gain check
     Eigen::Vector3d f_scale = (frontier.up_ - frontier.down_) / 2;
 
-    list<Eigen::Vector3d> ray;
-    double gain = 0;
-    bool inside_f;
+    double gain = 0;    
     VoxelState state;
-    // ROS_WARN("StrongCheckViewpoint0");
-    for(auto &d_l : gain_dirs_[v_id]){
-        //debug
-        // if((pos - (d_l.first + f_grid_[f_id].center_)).norm() > sensor_range_){
-        //     ROS_ERROR("error ray");
-        //     cout<<pos.transpose()<<endl;
-        //     cout<<(d_l.first + f_grid_[f_id].center_).transpose()<<endl;
-        //     cout<<(d_l.first).transpose()<<endl;
-        //     cout<<(f_grid_[f_id].center_).transpose()<<endl;
-        // }
-        BM_->GetCastLine(pos, d_l.first + frontier.center_, ray);
-        for(auto &p : ray){
-            inside_f = true;
-            for(int dim = 0; dim < 3; dim++){
-                if(abs(frontier.center_(dim) - p(dim)) > f_scale(dim)){
-                    inside_f = false;
-                    break;
-                }
-            }
-            state = BM_->GetVoxState(p);
-            if(!inside_f){
-                if(state == VoxelState::occupied || state == VoxelState::out){
-                    break;
-                }
-            }
-            else{
-                if(state == VoxelState::free){
-                    continue;
-                }
-                else if(state == VoxelState::occupied || state == VoxelState::out){
-                    break;
-                }
-                else{
-                    gain += d_l.second * pow((p - pos).norm(), 2);
-                    break;
+
+    if(is_ground_robot_){
+        double yaw = vp_pose(3);
+        // Ouster sensor parameters (360° horizontal, ~45° vertical)
+        double dtheta = M_PI * 2 / FOV_h_num_;
+        double dphi = (ouster_ver_up_ - ouster_ver_low_) / FOV_v_num_;
+        double sin_2_dphi = sin(dphi / 2);
+
+        for(int h = 0; h < FOV_h_num_; h++){
+            double h_dir = yaw + double(h) / FOV_h_num_ * M_PI * 2 - M_PI;
+            
+            for(int v = 0; v < FOV_v_num_; v++){
+                double v_dir = double(v) / FOV_v_num_ * (ouster_ver_up_ - ouster_ver_low_) + ouster_ver_low_;
+                double cos_phi = cos(v_dir);
+                
+                Eigen::Vector3d dir;
+                dir(0) = cos(h_dir) * cos(v_dir);
+                dir(1) = sin(h_dir) * cos(v_dir);
+                dir(2) = sin(v_dir);
+                
+                list<Eigen::Vector3d> ray;
+                BM_->GetCastLine(pos, pos + dir * sensor_range_, ray);
+                
+                for(auto &p : ray){
+                    // Check if point is inside the frontier grid
+                    bool inside_f = true;
+                    for(int dim = 0; dim < 3; dim++){
+                        if(abs(frontier.center_(dim) - p(dim)) > f_scale(dim)){
+                            inside_f = false;
+                            break;
+                        }
+                    }
+                    
+                    state = BM_->GetVoxState(p);
+                    
+                    // Outside frontier: only check for occlusion
+                    if(!inside_f){
+                        if(state == VoxelState::occupied || state == VoxelState::out){
+                            break;
+                        }
+                    }
+                    // Inside frontier: count unknown voxels as gain
+                    else{
+                        if(state == VoxelState::free){
+                            continue;
+                        }
+                        else if(state == VoxelState::occupied || state == VoxelState::out){
+                            break;
+                        }
+                        else{ // unknown voxel
+                            double dist = (p - pos).norm();
+                            gain += 2*dtheta*pow(dist, 2)*sin_2_dphi*cos_phi;
+                            break;
+                        }
+                    }
                 }
             }
         }
     }
+    else{
+        // Original gain calculation for uav viewpoints
+        list<Eigen::Vector3d> ray;
+        bool inside_f;
+        // ROS_WARN("StrongCheckViewpoint0");
+
+        for(auto &d_l : gain_dirs_[v_id]){
+            //debug
+            // if((pos - (d_l.first + f_grid_[f_id].center_)).norm() > sensor_range_){
+            //     ROS_ERROR("error ray");
+            //     cout<<pos.transpose()<<endl;
+            //     cout<<(d_l.first + f_grid_[f_id].center_).transpose()<<endl;
+            //     cout<<(d_l.first).transpose()<<endl;
+            //     cout<<(f_grid_[f_id].center_).transpose()<<endl;
+            // }
+            BM_->GetCastLine(pos, d_l.first + frontier.center_, ray);
+            for(auto &p : ray){
+                inside_f = true;
+                for(int dim = 0; dim < 3; dim++){
+                    if(abs(frontier.center_(dim) - p(dim)) > f_scale(dim)){
+                        inside_f = false;
+                        break;
+                    }
+                }
+                state = BM_->GetVoxState(p);
+                if(!inside_f){
+                    if(state == VoxelState::occupied || state == VoxelState::out){
+                        break;
+                    }
+                }
+                else{
+                    if(state == VoxelState::free){
+                        continue;
+                    }
+                    else if(state == VoxelState::occupied || state == VoxelState::out){
+                        break;
+                    }
+                    else{
+                        gain += d_l.second * pow((p - pos).norm(), 2);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     // ROS_WARN("StrongCheckViewpoint1");
     if(gain < vp_thresh_) {
         return false;
@@ -869,6 +935,7 @@ bool FrontierGrid::StrongCheckViewpoint(const int &f_id, const int &v_id, const 
 
 void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
     // cout<<"SHOW!!!!!!!!!!!!!!!!!!!!!!!"<<endl;//debug
+    ROS_INFO("[FG::ShowVpsCallback] Timer triggered");
     Eigen::Vector4d vp_pose;
     visualization_msgs::MarkerArray mka;
     visualization_msgs::Marker mk1, mk2;

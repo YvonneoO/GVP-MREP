@@ -566,21 +566,53 @@ inline bool LowResMap::IsFeasible(const Eigen::VectorXd &pos, bool allow_uknown)
 
 inline bool LowResMap::IsFeasible(const Eigen::Vector3d &pos, bool allow_uknown){
     int blockid = GetBlockId(pos);
+    ROS_INFO("[LowResMap::IsFeasible] checking pos: %f, %f, %f, in blockid: %d", pos(0), pos(1), pos(2), blockid);
     if(blockid != -1){
         shared_ptr<LR_block> fp_ptr = gridBLK_[blockid];
         if(fp_ptr != NULL){
             shared_ptr<LR_node> node = GetNode(pos, fp_ptr);
-            if(node != NULL && node != Outnode_ && !node->flags_[0]) return true;
-            else if(allow_uknown && node == NULL) return true;
-            else if(allow_uknown && node != NULL && node != Outnode_ && node->flags_[3]) return true;
-            else return false;
+            if (node == NULL){
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in NULL node", pos(0), pos(1), pos(2));
+            }
+            else {
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, with node flag: %ld", pos(0), pos(1), pos(2), node->flags_.to_ulong());
+            }
+            if (node == Outnode_){
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in Outnode", pos(0), pos(1), pos(2));
+            }
+            if(node != NULL && node != Outnode_ && !node->flags_[0]) {
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in feasible node", pos(0), pos(1), pos(2));
+                return true;
+            }
+            else if(allow_uknown && node == NULL) {
+                ROS_INFO("[LowResMap::IsFeasible] null node but allow_uknown, return true", pos(0), pos(1), pos(2));
+                return true;
+            }
+            else if(allow_uknown && node != NULL && node != Outnode_ && node->flags_[3]) {
+                ROS_INFO("[LowResMap::IsFeasible] unknown node but allow_uknown, return true", pos(0), pos(1), pos(2));
+                return true;
+            }
+            else {
+                if (node == NULL && !allow_uknown) {
+                    ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in NULL node but not allow_uknown, return false", pos(0), pos(1), pos(2));
+                }
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is not feasible", pos(0), pos(1), pos(2));
+                return false;
+            }
         }
         else{
-            if(allow_uknown) return true;
-            return false;
+            // ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in NULL block", pos(0), pos(1), pos(2));
+            if(allow_uknown) {
+                return true;
+            }
+            else {
+                ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is in NULL block but not allow_uknown, return false", pos(0), pos(1), pos(2));
+                return false;
+            }
         }
     }
     else{
+        ROS_INFO("[LowResMap::IsFeasible] pos: %f, %f, %f, is out of map", pos(0), pos(1), pos(2));
         return false;
     }
 }
@@ -742,10 +774,12 @@ inline shared_ptr<LR_node> LowResMap::GetNode(const Eigen::Vector3d &pos){
             return GetNode(pos, fp_ptr);
         }
         else{
+            ROS_INFO("GetNode: pos (%f, %f, %f) with NULL block at blockid %d", pos(0), pos(1), pos(2), blockid);
             return NULL;
         }
     }
     else{
+        ROS_INFO("GetNode: pos (%f, %f, %f) with out of range blockid %d", pos(0), pos(1), pos(2), blockid);
         return Outnode_;
     }
 }
@@ -754,9 +788,11 @@ inline shared_ptr<LR_node> LowResMap::GetNode(const int &id){
     Eigen::Vector3d pos = IdtoPos(id);
     int blockid = GetBlockId(pos);
     if(blockid == -1) {
+        ROS_INFO("GetNode: input id %d (converts to pos (%f, %f, %f)) with out of range blockid %d", id, pos(0), pos(1), pos(2), blockid);
         return Outnode_;
     }
     else if(gridBLK_[blockid] == NULL){
+        ROS_INFO("GetNode: input id %d (converts to pos (%f, %f, %f)) with NULL block at blockid %d", id, pos(0), pos(1), pos(2), blockid);
         return NULL;
     }
     return gridBLK_[blockid]->local_grid_[GetNodeId(pos, gridBLK_[blockid])];

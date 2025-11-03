@@ -43,6 +43,20 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         max_range_, 4.5);
     nh_private_.param(ns + "/block_map/depth", 
         depth_, false);
+    nh_private_.param(ns + "/block_map/setCamParam", 
+        setCamParam_, false);
+    nh_private_.param(ns + "/block_map/fx", 
+        fx_, 320.0);
+    nh_private_.param(ns + "/block_map/fy", 
+        fy_, 320.0);
+    nh_private_.param(ns + "/block_map/cx", 
+        cx_, 320.0);
+    nh_private_.param(ns + "/block_map/cy", 
+        cy_, 240.0);
+    nh_private_.param(ns + "/block_map/u_max", 
+        u_max_, 640);
+    nh_private_.param(ns + "/block_map/v_max", 
+        v_max_, 480);
     nh_private_.param(ns + "/block_map/CamtoBody_Quater_x",
         cam2bodyrot.x(), 0.0);
     nh_private_.param(ns + "/block_map/CamtoBody_Quater_y",
@@ -241,7 +255,12 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         statistic_timer_ = nh.createTimer(ros::Duration(0.5), &BlockMap::StatisticV, this);
     }
     if(depth_){
-        camparam_sub_ = nh_.subscribe("/block_map/caminfo", 10, &BlockMap::CamParamCallback, this);
+        if (setCamParam_){
+            setCamParam();
+        }
+        else{
+            camparam_sub_ = nh_.subscribe("/block_map/caminfo", 10, &BlockMap::CamParamCallback, this);
+        }
     }
     if(show_block_)
         show_timer_ = nh_.createTimer(ros::Duration(1.0 / show_freq_), &BlockMap::ShowMapCallback, this);
@@ -335,7 +354,7 @@ void BlockMap::InsertDepthCallback(const sensor_msgs::ImageConstPtr &img){
 }
 
 void BlockMap::CamParamCallback(const sensor_msgs::CameraInfoConstPtr &param){
-    ROS_WARN("get param!");
+    ROS_INFO("[BM::CamParamCallback] get param!");
 
     fx_ = param->K[0];
     cx_ = param->K[2];
@@ -376,8 +395,39 @@ void BlockMap::CamParamCallback(const sensor_msgs::CameraInfoConstPtr &param){
     camparam_sub_.shutdown();
 }
 
+void BlockMap::setCamParam(){
+    have_cam_param_ = true;
+
+    downsample_size_ = (int)floor(resolution_ * fx_ / max_range_);
+    downsample_size_ = min((int)floor(resolution_ * fy_ / max_range_), downsample_size_);
+
+    u_down_max_ = (int)floor((u_max_) / downsample_size_);
+    v_down_max_ = (int)floor((v_max_) / downsample_size_);
+    u_max_ = u_down_max_ * downsample_size_;
+    v_max_ = v_down_max_ * downsample_size_;
+    // depth_step_ = min(depth_step_, downsample_size_);
+    cout<<"fx_:"<<fx_<<endl;
+    cout<<"fy_:"<<fy_<<endl;
+    cout<<"cx_:"<<cx_<<endl;
+    cout<<"cy_:"<<cy_<<endl;
+    cout<<"depth_step_:"<<depth_step_<<endl;
+    cout<<"u_down_max_:"<<u_down_max_<<endl;
+    cout<<"v_down_max_:"<<v_down_max_<<endl;
+    cout<<"downsample_size_:"<<downsample_size_<<endl;
+    downsampled_img_.resize(u_down_max_ * v_down_max_);
+    for(int u = 0; u < u_down_max_; u++){
+        for(int v = 0; v < v_down_max_; v++){
+            Eigen::Vector3d pt(((u + 0.5) * downsample_size_ - cx_) * max_range_ / fx_,((v + 0.5) * downsample_size_ - cy_) * max_range_ / fy_, max_range_);
+            pt = pt.normalized() * max_range_;
+            downsampled_img_[u + v*u_down_max_].max_depth_ = pt.z();
+            downsampled_img_[u + v*u_down_max_].close_depth_ = pt.z();
+
+        }
+    }
+}
 
 void BlockMap::ShowMapCallback(const ros::TimerEvent &e){
+    // ROS_INFO("[BM::ShowMapCallback] Timer callback triggered");
     visualization_msgs::MarkerArray mks;
     visualization_msgs::Marker mk_stand;
     mk_stand.action = visualization_msgs::Marker::ADD;
@@ -394,7 +444,7 @@ void BlockMap::ShowMapCallback(const ros::TimerEvent &e){
 
     int i = 0;
     geometry_msgs::Point pt;
-    // ROS_ERROR("show size:%d", (int)changed_blocks_.size());
+    ROS_INFO("[BM::ShowMapCallback] show size:%d", (int)changed_blocks_.size());
     for(vector<int>::iterator block_it = changed_blocks_.begin(); block_it != changed_blocks_.end(); block_it++, i++){
         mks.markers.push_back(mk_stand);
         mks.markers.back().id = *block_it;
@@ -407,36 +457,38 @@ void BlockMap::ShowMapCallback(const ros::TimerEvent &e){
         int idx = 0;
         int debug_bk, debug_id;
         if(GBS_[*block_it]->state_ == MIXED){//debug
-        for( z = resolution_ * (GBS_[*block_it]->origin_(2) + 0.5) + origin_(2); z < block_end(2); z += resolution_){
-            for( y = resolution_ * (GBS_[*block_it]->origin_(1)  + 0.5) + origin_(1); y < block_end(1); y += resolution_){
-                for( x = resolution_ * (GBS_[*block_it]->origin_(0) + 0.5) + origin_(0); x < block_end(0); x += resolution_){
-                    if(GBS_[*block_it]->state_ == OCCUPIED || GBS_[*block_it]->odds_log_[idx] > 0){
-                        pt.x = x;
-                        pt.y = y; 
-                        pt.z = z;
-                        mks.markers.back().points.push_back(pt);
-                        mks.markers.back().colors.push_back(Getcolor(z));
+            for( z = resolution_ * (GBS_[*block_it]->origin_(2) + 0.5) + origin_(2); z < block_end(2); z += resolution_){
+                for( y = resolution_ * (GBS_[*block_it]->origin_(1)  + 0.5) + origin_(1); y < block_end(1); y += resolution_){
+                    for( x = resolution_ * (GBS_[*block_it]->origin_(0) + 0.5) + origin_(0); x < block_end(0); x += resolution_){
+                        if(GBS_[*block_it]->state_ == OCCUPIED || GBS_[*block_it]->odds_log_[idx] > 0){
+                            pt.x = x;
+                            pt.y = y; 
+                            pt.z = z;
+                            mks.markers.back().points.push_back(pt);
+                            mks.markers.back().colors.push_back(Getcolor(z));
+                        }
+                        GetVox(debug_bk, debug_id, Eigen::Vector3d(x, y, z));
+                        if(debug_bk != *block_it || debug_id != idx) {
+                            cout<<debug_bk<<";"<<debug_id<<"  "<<Eigen::Vector3d(x, y, z).transpose()<<"origin:"<<GBS_[*block_it]->origin_.transpose()
+                                <<"  "<<block_end.transpose()<<" .."<<GBS_[*block_it]->block_size_.transpose()<<endl;
+                            cout<<*block_it<<" "<<idx<<endl;
+                        }
+                        idx++;
                     }
-                    GetVox(debug_bk, debug_id, Eigen::Vector3d(x, y, z));
-                    if(debug_bk != *block_it || debug_id != idx) {
-                        cout<<debug_bk<<";"<<debug_id<<"  "<<Eigen::Vector3d(x, y, z).transpose()<<"origin:"<<GBS_[*block_it]->origin_.transpose()
-                            <<"  "<<block_end.transpose()<<" .."<<GBS_[*block_it]->block_size_.transpose()<<endl;
-                        cout<<*block_it<<" "<<idx<<endl;
-                    }
-                    idx++;
                 }
             }
-        }
         }
         if(mks.markers.back().points.size() == 0){
             mks.markers.back().action = visualization_msgs::Marker::DELETE;
         } 
     }
+    // ROS_INFO("[BM::ShowMapCallback] publish %d markers", (int)mks.markers.size());
     if(mks.markers.size() > 0) vox_pub_.publish(mks);
     changed_blocks_.clear();
 }
 
 void BlockMap::SwarmMapCallback(const ros::TimerEvent &e){
+    // ROS_INFO("[BM::SwarmMapCallback] Timer fired");
     if(SDM_->is_ground_){
         while (!SDM_->swarm_sub_map_.empty()){
             InsertSwarmPts(SDM_->swarm_sub_map_.front());
@@ -515,8 +567,18 @@ void BlockMap::SwarmMapCallback(const ros::TimerEvent &e){
                 // GetSBSBound(SDM_->mreq_.f_id[i], SDM_->mreq_.block_id[i], up, down);//debug
                 // pts.push_back((up + down) / 2);
 
-                if(SBS_[SDM_->mreq_.f_id[i]].to_pub_[SDM_->mreq_.block_id[i]]) continue;
-                SBS_[SDM_->mreq_.f_id[i]].to_pub_[SDM_->mreq_.block_id[i]] = true;
+                const auto f_id = static_cast<size_t>(SDM_->mreq_.f_id[i]);
+                const auto block_id = static_cast<size_t>(SDM_->mreq_.block_id[i]);
+                if(f_id >= SBS_.size()){
+                    ROS_ERROR("[BM::SwarmMapCallback] invalid f_id %zu (SBS_.size()=%zu)", f_id, SBS_.size());
+                    continue;
+                }
+                if(block_id >= SBS_[f_id].to_pub_.size()){
+                    ROS_ERROR("[BM::SwarmMapCallback] invalid block_id %zu for f_id %zu (to_pub_.size()=%zu)", block_id, f_id, SBS_[f_id].to_pub_.size());
+                    continue;
+                }
+                if(SBS_[f_id].to_pub_[block_id]) continue;
+                SBS_[f_id].to_pub_[block_id] = true;
                 double pub_t = cur_t - swarm_send_delay_ - 0.5;
                 swarm_pub_block_.push_back({{SDM_->mreq_.f_id[i], SDM_->mreq_.block_id[i]}, pub_t});
             }
@@ -529,9 +591,18 @@ void BlockMap::SwarmMapCallback(const ros::TimerEvent &e){
         if(SDM_->req_flag_ && !SDM_->finish_list_[SDM_->self_id_ - 1] && !finish_flag_){
             SDM_->req_flag_ = false;
             for(int i = 0; i < SDM_->mreq_.block_id.size(); i++){
-
-                if(SBS_[SDM_->mreq_.f_id[i]].to_pub_[SDM_->mreq_.block_id[i]]) continue;
-                SBS_[SDM_->mreq_.f_id[i]].to_pub_[SDM_->mreq_.block_id[i]] = true;
+                const auto f_id = static_cast<size_t>(SDM_->mreq_.f_id[i]);
+                const auto block_id = static_cast<size_t>(SDM_->mreq_.block_id[i]);
+                if(f_id >= SBS_.size()){
+                    ROS_ERROR("[BM::SwarmMapCallback] invalid f_id %zu (SBS_.size()=%zu)", f_id, SBS_.size());
+                    continue;
+                }
+                if(block_id >= SBS_[f_id].to_pub_.size()){
+                    ROS_ERROR("[BM::SwarmMapCallback] invalid block_id %zu for f_id %zu (to_pub_.size()=%zu)", block_id, f_id, SBS_[f_id].to_pub_.size());
+                    continue;
+                }
+                if(SBS_[f_id].to_pub_[block_id]) continue;
+                SBS_[f_id].to_pub_[block_id] = true;
                 double pub_t = cur_t;
                 if(vis_mode_) pub_t -= swarm_send_delay_ + 0.5;
                 swarm_pub_block_.push_back({{SDM_->mreq_.f_id[i], SDM_->mreq_.block_id[i]}, pub_t});
@@ -546,6 +617,21 @@ void BlockMap::SwarmMapCallback(const ros::TimerEvent &e){
             exp_comm_msgs::MapC msg;
             if(pub_it->second + swarm_send_delay_ < cur_t) t_o_pub = true; // time out
             Vox2Msg(msg, pub_it->first.first, pub_it->first.second);
+            if(msg.f_id >= SBS_.size()){
+                ROS_ERROR("[BM::SwarmMapCallback] Vox2Msg produced invalid f_id %u (SBS_.size()=%zu)", msg.f_id, SBS_.size());
+                auto erase_it = pub_it;
+                pub_it--;
+                swarm_pub_block_.erase(erase_it);
+                continue;
+            }
+            if(msg.block_id >= SBS_[msg.f_id].to_pub_.size()){
+                ROS_ERROR("[BM::SwarmMapCallback] Vox2Msg produced invalid block_id %u for f_id %u (to_pub_.size()=%zu)",
+                          msg.block_id, msg.f_id, SBS_[msg.f_id].to_pub_.size());
+                auto erase_it = pub_it;
+                pub_it--;
+                swarm_pub_block_.erase(erase_it);
+                continue;
+            }
             if(((!finish_flag_ ||vis_mode_) && SBS_[msg.f_id].last_pub_rate_[msg.block_id] + 0.15 > SBS_[msg.f_id].exploration_rate_[msg.block_id]
                 || finish_flag_ && SBS_[msg.f_id].last_pub_rate_[msg.block_id] + 0.01 > SBS_[msg.f_id].exploration_rate_[msg.block_id])
                  && t_o_pub){
@@ -599,7 +685,7 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
     if(InsideMap(cam3i)){
         LoadSwarmFilter();
         cam = cam2world_.block(0,3,3,1);
-        
+
         std::vector<int> indices;
         pcl::PointCloud<pcl::PointXYZ>::Ptr points(new pcl::PointCloud<pcl::PointXYZ>);
         pcl::fromROSMsg(*pcl, *points);
@@ -611,6 +697,7 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             end_point(0) = pcl_it->x;
             end_point(1) = pcl_it->y;
             end_point(2) = pcl_it->z;
+
             // Transform from sensor frame to world frame
             end_point = cam2world_.block(0, 0, 3, 3) * end_point + cam2world_.block(0, 3, 3, 1);
 
@@ -697,6 +784,7 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
                 GBS_[*block_it]->show_ = true;
             }
         }
+        ROS_INFO("insert pcl callback finished, newly_register_idx_ size: %d", newly_register_idx_.size());
     }
 }
 
@@ -858,6 +946,9 @@ void BlockMap::InsertImg(const sensor_msgs::ImageConstPtr &depth){
         }
     }
     // Debug();
+    std::list<Eigen::Vector3d> debug_pts(cur_pcl_.begin(), cur_pcl_.end());
+    ROS_WARN("debug_pts size: %d", debug_pts.size());
+    Debug(debug_pts, 10);
 }
 
 void BlockMap::ProjectToImg(const sensor_msgs::PointCloud2ConstPtr &pcl, vector<double> &depth_img){
@@ -1023,7 +1114,7 @@ void BlockMap::Debug(list<Eigen::Vector3d> &pts, int ddd){
     mk.color.a = 0.5;
     geometry_msgs::Point pt;
     if(!finish_flag_) mk.lifetime = ros::Duration(1.0);
-    ROS_WARN("id:%d Debug", SDM_->self_id_);
+    // ROS_WARN("id:%d Debug Pub", SDM_->self_id_);
     for(auto &p : pts){
         // Eigen::Vector3d p = IdtoPos(p_id.first);
         pt.x = p(0);

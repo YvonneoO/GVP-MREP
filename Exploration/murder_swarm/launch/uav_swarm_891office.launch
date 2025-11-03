@@ -1,7 +1,7 @@
 <launch>
   <arg name="world" default="891office" />
   <arg name="gui" default="true" />
-  <arg name="drone_num" value="2" />
+  <arg name="drone_num" value="1" />
 
   <!-- <include file="$(find gazebo_ros)/launch/empty_world.launch">
     <arg name="world_name" value="$(find ato_test)/worlds/$(arg world).world" />
@@ -24,30 +24,22 @@
   <!-- <node name="rvizvisualisation" pkg="rviz" type="rviz" output="screen" args="-d $(find murder_swarm)/rviz/murder_swarm_local.rviz"/> -->
   <!-- <node name="rvizvisualisation" pkg="rviz" type="rviz" output="screen" args="-d $(find murder_swarm)/rviz/ground_demo.rviz"/> -->
 
- <include file="$(find murder_swarm)/launch/ugv_single.launch" if="$(eval arg('drone_num') >= 1)">
+ <include file="$(find murder_swarm)/launch/uav_single.launch" if="$(eval arg('drone_num') >= 1)">
     <arg name="drone_num" value="$(arg drone_num)"/>
     <arg name="world" value="$(arg world)"/>
     <arg name="id" value="1"/>
-    <arg name="init_x"   value="-7"/>
-    <arg name="init_y"   value="0"/>
-    <arg name="init_z"   value="0.14"/> 
+    <arg name="init_x"   value="5"/>
+    <arg name="init_y"   value="2"/>
+    <arg name="init_z"   value="2.0"/> 
   </include>
 
-  <include file="$(find murder_swarm)/launch/ugv_single.launch" if="$(eval arg('drone_num') >= 2)">
+  <include file="$(find murder_swarm)/launch/uav_single.launch" if="$(eval arg('drone_num') >= 2)">
     <arg name="drone_num" value="$(arg drone_num)"/>
     <arg name="world" value="$(arg world)"/>
     <arg name="id" value="2"/>
-    <arg name="init_x"   value="6"/>
-    <arg name="init_y"   value="-7"/>
+    <arg name="init_x"   value="-2"/>
+    <arg name="init_y"   value="-2"/>
     <arg name="init_z"   value="0.14"/> 
   </include>
 
-  <!-- <include file="$(find murder_swarm)/launch/ugv_single.launch" if="$(eval arg('drone_num') >= 3)">
-    <arg name="drone_num" value="$(arg drone_num)"/>
-    <arg name="world" value="$(arg world)"/>
-    <arg name="id" value="3"/>
-    <arg name="init_x"   value="0"/>
-    <arg name="init_y"   value="-1.5"/>
-    <arg name="init_z"   value="0.75"/> 
-  </include> -->
 </launch>

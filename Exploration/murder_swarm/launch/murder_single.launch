@@ -7,7 +7,7 @@
     <arg name="world"/>
 
 
-    <node name="murder_$(arg id)" pkg="murder_swarm" type="murder_swarm_node" output="screen">
+    <node name="murder_$(arg id)" pkg="murder_swarm" type="murder_swarm_node" output="log">
         <rosparam command="load" file="$(find block_map)/color/Paranoid.yaml" />
         <rosparam command="load" file="$(find murder_swarm)/resource/murder_$(arg world).yaml" />
         <rosparam command="load" file="$(find block_map)/color/color_id.yaml" />
@@ -45,7 +45,7 @@
 
     </node>
         <!-- if="$(eval arg('id') >= 2)" -->
-    <node name="traj_exc_node$(arg id)" pkg="traj_exc" type="traj_exc_node" output="screen">
+    <node name="traj_exc_node$(arg id)" pkg="traj_exc" type="traj_exc_node" output="log">
         <rosparam command="load" file="$(find murder_swarm)/resource/murder_$(arg world).yaml" />
         <remap from="/odom" to="/firefly$(arg id)/ground_truth/odometry"/>
         <remap from="/trajectory_cmd" to="/Murder/Traj$(arg id)"/>
