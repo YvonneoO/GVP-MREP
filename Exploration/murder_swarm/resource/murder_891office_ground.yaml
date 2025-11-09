@@ -98,7 +98,7 @@ Exp/takeoff_y: 0.0
 Exp/takeoff_z: 0.14  # UGV base_link odometry height
 Exp/takeoff_yaw: 0.0
 Exp/reach_out_t: 0.1
-Exp/AutoTakeoff: true
+Exp/AutoTakeoff: false
 Exp/acc_off: -0.5
 Exp/statistic: true
 Exp/finish_thresh: 1.0 # percentage of finished robots to trigger exp termination

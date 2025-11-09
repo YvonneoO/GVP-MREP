@@ -1,4 +1,4 @@
-# ugv / spot, 2d motion
+# ugv, 2d motion
 is_ground_robot: true
 robot_height: 0.14
 
@@ -37,7 +37,7 @@ Frontier/min_vp_num: 6 # min alive vps in a ft grid to remain exploring (infeasi
 # filter point cloud for robot body
 block_map/RobotVisX: 1.2
 block_map/RobotVisY: 0.8
-block_map/RobotVisZ: 0.8
+block_map/RobotVisZ: 0.4
 block_map/bline_occ_range: 0.8
 block_map/swarm_tol: 0.3 # time tolerance for robot pose timestamp
 block_map/swarm_send_delay: 2.0 # delay time to send map info
@@ -79,7 +79,7 @@ Exp/show_swarm_traj: false
 EXP/finish_hold_duration: 15.0 # confirmation period before terminating exploration
 Exp/robot_sizeX: 1.2
 Exp/robot_sizeY: 0.8
-Exp/robot_sizeZ: 0.8
+Exp/robot_sizeZ: 0.4
 Exp/minX: -25.0
 Exp/minY: -25.0
 Exp/minZ: -0.1
@@ -98,7 +98,7 @@ Exp/takeoff_y: 0.0
 Exp/takeoff_z: 0.14  # UGV base_link odometry height
 Exp/takeoff_yaw: 0.0
 Exp/reach_out_t: 0.1
-Exp/AutoTakeoff: true
+Exp/AutoTakeoff: false
 Exp/acc_off: -0.5
 Exp/statistic: true
 Exp/finish_thresh: 1.0 # percentage of finished robots to trigger exp termination

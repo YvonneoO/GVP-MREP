@@ -18,6 +18,7 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     nh_private.param(ns + "/Exp/acc_off", acc_off_, -0.3);
     nh_private.param(ns + "/Exp/swarm_check", swarm_check_, false);
     nh_private.param(ns + "/Exp/colli_range", colli_range_, 0.8);
+    nh_private.param(ns + "/is_ground_robot", is_ground_robot_, false);
     
     nh_ = nh;
     nh_private_ = nh_private;
@@ -91,7 +92,9 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     show_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "/Murder/Show", 5);
     // posevis_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "Murder/PoseVis", 1);
     traj_pub_ = nh_.advertise<swarm_exp_msgs::LocalTraj>("/Murder/Traj", 1);
-    sparse_waypoints_pub_ = nh_.advertise<nav_msgs::Path>("/ugv/sparse_waypoints", 10);
+    if (is_ground_robot_) {
+        sparse_waypoints_pub_ = nh_.advertise<nav_msgs::Path>("/ugv/sparse_waypoints", 10);
+    }
 }
 
 void Murder::BroadCastFinish(){
@@ -953,7 +956,9 @@ bool Murder::TrajPlanB(const Eigen::Vector3d &ps, const Eigen::Vector3d &vs, con
 
         if(LRM_.FindCorridors(path, h, p, path_pruned, traj_length_)){
             // Publish sparse waypoints for UGV before trajectory optimization
-            PublishSparseWaypoints(path_pruned, pe, ype);
+            if (is_ground_robot_) {
+                PublishSparseWaypoints(path_pruned, pe, ype);
+            }
 
             Eigen::Matrix3d startpva, endpva;
             double min_t = YawP_.GetMinT(yps, ype) - 1e-3;

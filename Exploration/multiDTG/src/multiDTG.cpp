@@ -232,10 +232,11 @@ void MultiDTG::Update(const Eigen::Matrix4d &robot_pose, bool clear_x){
     root_ = NULL;
 
     if(LRM_->UpdateLocalTopo(robot_pose, BM_->cur_pcl_, clear_x)){
-        if(!LRM_->IsFeasible(robot_pos, true)){//debug
-            ROS_WARN("id:%d Infeasible1! DTG refuse to update!", SDM_->self_id_);
-            return;
-        }
+        // ROS_INFO("check if the robot is in feasible region in MultiDTG::Update");
+        // if(!LRM_->IsFeasible(robot_pos, true)){//debug
+        //     ROS_ERROR("id:%d at pos %f %f %f Infeasible1! DTG refuse to update!", SDM_->self_id_, robot_pos(0), robot_pos(1), robot_pos(2));
+        //     return;
+        // }
         
         //generate new Hnode
         root_ = CreateHnode(robot_pos);

@@ -7,6 +7,7 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     bool show_frontier;
     nh_private_.param(ns + "/is_ground_robot", 
         is_ground_robot_, false);
+    std::cout << "FG: is_ground_robot_: " << is_ground_robot_ << std::endl;
     nh_private_.param(ns + "/robot_height", 
         robot_height_, 0.14);
     nh_private_.param(ns + "/Exp/minX", 

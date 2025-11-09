@@ -167,6 +167,7 @@ private:
     Eigen::Matrix4d robot_pose_;
     double yaw_, yaw_v_;
     bool sensor_flag_, have_odom_;
+    bool is_ground_robot_;
 
     double last_map_update_t_;    //blockmap & DTG
     double traj_start_t_, traj_end_t_;

@@ -88,7 +88,7 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
         //expand
         Eigen::Vector3i diff(0, 0, 0);
         int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < dim_limit; dim++){
+        for(int dim = 0; dim < 3; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
@@ -203,7 +203,7 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
         //expand
         Eigen::Vector3i diff(0, 0, 0);
         int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < dim_limit; dim++){
+        for(int dim = 0; dim < 3; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
@@ -331,7 +331,7 @@ void LowResMap::Djkstra(int workid, Eigen::Vector3d start, list<Eigen::Vector3d>
         //expand
         Eigen::Vector3i diff(0, 0, 0);
         int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < dim_limit; dim++){
+        for(int dim = 0; dim < 3; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
@@ -397,7 +397,7 @@ bool LowResMap::DjkstraLocalDist(const Eigen::Vector3d &start, list<list<Eigen::
         c_node->status_ = in_close;
 
         int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < dim_limit; dim++){
+        for(int dim = 0; dim < 3; dim++){
             Eigen::Vector3i diff(0, 0, 0);
             for(int off = -1; off <= 1; off += 2){
                 diff(dim) = off;
@@ -497,7 +497,7 @@ void LowResMap::DjkstraLocal(Eigen::Vector3d start){
         H_Topolist_.emplace_back(b_n_id);
         c_node->h_status_ = in_close;
         int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < dim_limit; dim++){
+        for(int dim = 0; dim < 3; dim++){
             Eigen::Vector3i diff(0, 0, 0);
             for(int off = -1; off <= 1; off += 2){
                 // ROS_WARN("DjkstraLocal4");

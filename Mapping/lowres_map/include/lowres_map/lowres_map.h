@@ -14,6 +14,7 @@
 #include <random>
 #include <mutex>
 #include <bitset>
+#include <algorithm>
 
 #include <glog/logging.h>
 
@@ -428,6 +429,8 @@ private:
     inline void SetEXPNode(const Eigen::Vector3d &pos);         
     inline void SetTopoNode(const Eigen::Vector3d &pos, shared_ptr<LR_node> &lr_node, shared_ptr<sch_node> &c_node);         
     inline void SetEXPNode(const int &b_id, const int &n_id, const Eigen::Vector3i &bk3i);       
+    inline void UpdateRobotNavPos();
+    inline double GroundFilterThresh() const;
     inline void PostoId3(const Eigen::Vector3d &pos, Eigen::Vector3i &id3);              //dont check
     inline Eigen::Vector3i GetBolckSize(const Eigen::Vector3i &blockid);              //dont check
     inline int CheckNode(const Eigen::Vector3i pos);
@@ -469,6 +472,7 @@ private:
     vector<int> DeadBlockList_;
     Eigen::Matrix4d Robot_pose_;
     Eigen::Vector3d Robot_pos_;
+    Eigen::Vector3d Robot_nav_pos_;
     shared_ptr<LR_node> /*Xnode_,*/ Outnode_, Rootnode_, Expandnode_; 
     int Eternal_bid_, Eternal_nid_;
     bool workable_;          
@@ -478,6 +482,8 @@ private:
     Eigen::Matrix4d FOV_ieqs_;  //ax+by+cz+d<=0
     double ver_up_dir_, ver_down_dir_, hor_left_dir_, hor_right_dir_;
     double max_g_cost_, h_thresh_, eu_range_;        
+    double robot_height_;
+    double ground_filter_margin_;
     bool show_dtg_;
 
     //for prune path
@@ -488,6 +494,7 @@ private:
     uint32_t root_h_id_;
     ColorManager *CM_;
 
+    int uav_id_;
     int drone_num_;
     bool is_ground_robot_;
 };
@@ -509,6 +516,17 @@ inline Eigen::Vector3d LowResMap::GetStdPos(const Eigen::Vector3d &pos){
     Eigen::Vector3i std_pos;
     PostoId3(pos, std_pos);
     return IdtoPos(std_pos);
+}
+
+inline void LowResMap::UpdateRobotNavPos(){
+    Robot_nav_pos_ = Robot_pos_;
+    if(is_ground_robot_){
+        Robot_nav_pos_(2) = robot_height_;
+    }
+}
+
+inline double LowResMap::GroundFilterThresh() const{
+    return std::max(robot_height_ - ground_filter_margin_, map_lowbd_(2));
 }
 
 // inline double LowResMap::GetLocalDist(const Eigen::Vector3d &pos){
@@ -1073,7 +1091,7 @@ inline void LowResMap::GetTopoNeighbours(shared_ptr<sch_node> &node){
             pos = IdtoPos(diff+node->pos_);
             lr_node = GetNode(pos);
             double g = node->g_score_ + GetDist(diff(0), diff(1), diff(2));
-            if((g > max_g_cost_ || (Robot_pos_ - pos).norm() > eu_range_)) continue;
+            if((g > max_g_cost_ || (Robot_nav_pos_ - pos).norm() > eu_range_)) continue;
 
             if(lr_node != NULL && lr_node->flags_[0]){
                 continue;
@@ -1210,12 +1228,23 @@ inline bool LowResMap::InsideFOV(const Eigen::Vector3d pos){
     x = pos(0);
     y = pos(1);
     z = pos(2);
-    if(FOV_ieqs_(0, 0) * x + FOV_ieqs_(1, 0) * y + FOV_ieqs_(2, 0) * z + FOV_ieqs_(3, 0) > 0 
-      || FOV_ieqs_(0, 1) * x + FOV_ieqs_(1, 1) * y + FOV_ieqs_(2, 1) * z + FOV_ieqs_(3, 1) > 0 
-      || FOV_ieqs_(0, 2) * x + FOV_ieqs_(1, 2) * y + FOV_ieqs_(2, 2) * z + FOV_ieqs_(3, 2) > 0 
-      || FOV_ieqs_(0, 3) * x + FOV_ieqs_(1, 3) * y + FOV_ieqs_(2, 3) * z + FOV_ieqs_(3, 3) > 0 
-      || (pos - Robot_pos_).norm() > range_){
-        return false;
+
+    if (is_ground_robot_) {
+        // OUSTER 360-degree LiDAR model
+        if(FOV_ieqs_(0, 0) * x + FOV_ieqs_(1, 0) * y + FOV_ieqs_(2, 0) * z + FOV_ieqs_(3, 0) > 0  // Up plane
+          || FOV_ieqs_(0, 1) * x + FOV_ieqs_(1, 1) * y + FOV_ieqs_(2, 1) * z + FOV_ieqs_(3, 1) > 0  // Down plane
+          || (pos - Robot_pos_).norm() > range_){
+            return false;
+        }
+    } else {
+        // original: Frustum model for camera/Livox
+        if(FOV_ieqs_(0, 0) * x + FOV_ieqs_(1, 0) * y + FOV_ieqs_(2, 0) * z + FOV_ieqs_(3, 0) > 0 
+          || FOV_ieqs_(0, 1) * x + FOV_ieqs_(1, 1) * y + FOV_ieqs_(2, 1) * z + FOV_ieqs_(3, 1) > 0 
+          || FOV_ieqs_(0, 2) * x + FOV_ieqs_(1, 2) * y + FOV_ieqs_(2, 2) * z + FOV_ieqs_(3, 2) > 0 
+          || FOV_ieqs_(0, 3) * x + FOV_ieqs_(1, 3) * y + FOV_ieqs_(2, 3) * z + FOV_ieqs_(3, 3) > 0 
+          || (pos - Robot_pos_).norm() > range_){
+            return false;
+        }
     }
     return true;
 }
@@ -1460,21 +1489,42 @@ inline int LowResMap::CheckNode(const Eigen::Vector3i pos){
     startpos(0) += resolution_/2;
     startpos(1) += resolution_/2;
     startpos(2) += resolution_/2;
-    int state = 0;
+
+    // Ground plane & robot geometry
+    const double ground_thresh   = GroundFilterThresh();
+
+    // Self-filter parameters
+    const double robot_z_max = Robot_pos_.z() + Robot_size_.z();
+    const double robot_radius_sq = Robot_size_.x() * Robot_size_.x() * 0.25;
+
+    int state = 0; // 0 = free, 1 = occupied, 2 = unknown
     for(int x = 0; x < node_size_(0); x++)
         for(int y = 0; y < node_size_(1); y++)
             for(int z = 0; z < node_size_(2); z++){
         // volumetric_mapping::WorldBase::CellStatus cstatus = Octomap_->getCellStatusPoint(startpos+Eigen::Vector3d(x,y,z)*resolution_);
         chk_pos = startpos+Eigen::Vector3d(x,y,z)*resolution_;
         VoxelState cstatus = map_->GetVoxState(chk_pos);
+
         if(cstatus == VoxelState::occupied){
-            return 1;
+            if (is_ground_robot_) {
+                // Filter 1: Ignore ground plane
+                if (chk_pos(2) <= ground_thresh) {
+                    continue;
+                }
+                // Filter 2: Ignore robot's own body
+                double dx = chk_pos.x() - Robot_pos_.x();
+                double dy = chk_pos.y() - Robot_pos_.y();
+                if ((dx * dx + dy * dy < robot_radius_sq) && (chk_pos.z() < robot_z_max)) {
+                    continue;
+                }
+            }
+            return 1; // Is an actual obstacle
         }
         else if(cstatus == VoxelState::unknown){
-            return 2;
+            state = 2;
         }
     }
-    return 0;
+    return state;
 }
 
 inline void LowResMap::UpdateTie(const int &bid, const int &nid, const uint32_t &rid, bool new_h){
