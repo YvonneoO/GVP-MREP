@@ -15,6 +15,11 @@ cs_add_executable(traj_exc_node src/traj_exc_node.cpp)
 
 target_link_libraries(traj_exc_node
     ${catkin_LIBRARIES})
+
+cs_add_executable(ugv_traj_exec src/ugv_traj_exec.cpp)
+
+target_link_libraries(ugv_traj_exec
+    ${catkin_LIBRARIES})
 ##########
 # EXPORT #
 ##########

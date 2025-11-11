@@ -1,0 +1,27 @@
+traj_topic: "/trajectory_cmd"
+odom_topic: "/odom"
+cmd_topic: "/cmd_vel"
+
+# Sampling interval (seconds) along the polynomial trajectory
+waypoint_sample_dt: 0.1
+
+# Linear/angular velocity limits
+desired_velocity: 2.2
+desired_angular_velocity: 0.8
+velocity_lowerbound: 0.5
+angular_velocity_lowerbound: 0.4
+
+# PID gains for heading (angle) control
+Kp_angle: 5.0
+Ki_angle: 0.0
+Kd_angle: 0.2
+
+# PID gains for forward distance control
+Kp_distance: 1.0
+Ki_distance: 1.0
+Kd_distance: 1.0
+
+# Goal tolerances and loop rate
+reach_goal_distance: 0.3
+yaw_goal_tolerance: 0.05
+control_rate: 20

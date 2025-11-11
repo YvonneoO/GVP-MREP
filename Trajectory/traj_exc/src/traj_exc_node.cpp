@@ -6,6 +6,8 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <swarm_exp_msgs/LocalTraj.h>
 #include <std_msgs/Empty.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 #include <gcopter/traj_opt.h>
 #include <yaw_planner/yaw_planner.h>
@@ -17,7 +19,7 @@
 #include <message_filters/sync_policies/exact_time.h>
 #include <message_filters/time_synchronizer.h>
 
-ros::Publisher control_pub_, show_pub_, trigger_pub_;
+ros::Publisher control_traj_pub_, control_pose_pub_, show_pub_, trigger_pub_;
 ros::Subscriber traj_sub_;
 ros::Subscriber takeoff_sub_;
 int traj_state_;
@@ -28,6 +30,8 @@ double start_t_;
 YawPlanner yaw_traj_;
 
 bool ready_;
+bool use_pose_setpoint_;
+std::string command_topic_;
 Eigen::Vector3d robot_pos_, takeoff_pos_;
 double robot_yaw_;
 double max_v_, max_a_, max_yawd_, max_yawdd_;
@@ -37,31 +41,59 @@ double init_t_;
 ros::Timer run_timer_;
 void Showcmd(Eigen::Vector3d pos, double yaw);
 bool TryUpdateTraj();
+void PublishSetpoint(const Eigen::Vector3d &p, const Eigen::Vector3d &v,
+    const Eigen::Vector3d &a, double yaw, double yawd, double yawdd);
+
+void PublishSetpoint(const Eigen::Vector3d &p, const Eigen::Vector3d &v,
+    const Eigen::Vector3d &a, double yaw, double yawd, double yawdd){
+    if(use_pose_setpoint_){
+        geometry_msgs::PoseStamped pose;
+        pose.header.frame_id = "world";
+        pose.header.stamp = ros::Time::now();
+        pose.pose.position.x = p.x();
+        pose.pose.position.y = p.y();
+        pose.pose.position.z = p.z();
+        tf2::Quaternion q;
+        q.setRPY(0.0, 0.0, yaw);
+        q.normalize();
+        pose.pose.orientation = tf2::toMsg(q);
+        if(control_pose_pub_){
+            control_pose_pub_.publish(pose);
+        }
+        return;
+    }
+    trajectory_msgs::MultiDOFJointTrajectoryPoint trajectory_point_msg;
+    trajectory_msgs::MultiDOFJointTrajectory samples_array;
+    mav_msgs::EigenTrajectoryPoint trajectory_point;
+    trajectory_point.position_W = p;
+    trajectory_point.velocity_W = v;
+    trajectory_point.acceleration_W = a;
+    trajectory_point.setFromYaw(yaw);
+    trajectory_point.setFromYawRate(yawd);
+    trajectory_point.setFromYawAcc(yawdd);
+    mav_msgs::msgMultiDofJointTrajectoryPointFromEigen(trajectory_point, &trajectory_point_msg);
+    samples_array.points.push_back(trajectory_point_msg);
+    if(control_traj_pub_){
+        control_traj_pub_.publish(samples_array);
+    }
+}
 
 void Takeoff(const std_msgs::EmptyPtr &msg){
-    trajectory_msgs::MultiDOFJointTrajectoryPoint trajectory_point_msg;
-    mav_msgs::EigenTrajectoryPoint trajectory_point;
-    trajectory_point.position_W.x() = takeoff_pos_(0);
-    trajectory_point.position_W.y() = takeoff_pos_(1);
-    trajectory_point.orientation_W_B.w() = 1.0;
-    trajectory_point.orientation_W_B.z() = 0.0;
+    Eigen::Vector3d v = Eigen::Vector3d::Zero();
+    Eigen::Vector3d a = Eigen::Vector3d::Zero();
     for(double l = 0.0; l < 1.0; l += 0.11){
-        trajectory_msgs::MultiDOFJointTrajectory samples_array;
-        trajectory_point.position_W.z() = takeoff_pos_(2)*l;
-        trajectory_point.orientation_W_B.z() = sin(M_PI * (l) / 2);
-        trajectory_point.orientation_W_B.w() = cos(M_PI * l / 2);
-        mav_msgs::msgMultiDofJointTrajectoryPointFromEigen(trajectory_point, &trajectory_point_msg);
-        samples_array.points.push_back(trajectory_point_msg);
-        control_pub_.publish(samples_array);
+        Eigen::Vector3d pos = takeoff_pos_;
+        pos.z() = takeoff_pos_(2) * l;
+        double yaw = M_PI * l;
+        PublishSetpoint(pos, v, a, yaw, 0.0, 0.0);
         ros::Duration(2.0/10).sleep();
     }
     ros::Duration(0.5).sleep();
+    Eigen::Vector3d pos = takeoff_pos_;
+    pos.z() = takeoff_pos_(2);
     for(double l = 0.0; l < 1.0; l += 0.11){    
-        trajectory_msgs::MultiDOFJointTrajectory samples_array;
-        trajectory_point.position_W.x() += 0.11 * 1.5;
-        mav_msgs::msgMultiDofJointTrajectoryPointFromEigen(trajectory_point, &trajectory_point_msg);
-        samples_array.points.push_back(trajectory_point_msg);
-        control_pub_.publish(samples_array);
+        pos.x() += 0.11 * 1.5;
+        PublishSetpoint(pos, v, a, 0.0, 0.0, 0.0);
         ros::Duration(1.0/10).sleep();
     }
     ros::Duration(1.5).sleep();
@@ -72,9 +104,6 @@ void Takeoff(const std_msgs::EmptyPtr &msg){
 
 void RunCallback(const ros::TimerEvent &e){
     if(!ready_) return;
-    trajectory_msgs::MultiDOFJointTrajectory samples_array;
-    trajectory_msgs::MultiDOFJointTrajectoryPoint trajectory_point_msg;
-    mav_msgs::EigenTrajectoryPoint trajectory_point;
     Eigen::Vector3d p, v, a;
     double yaw, yawd, yawdd;
     // ROS_WARN("run0");
@@ -114,23 +143,7 @@ void RunCallback(const ros::TimerEvent &e){
         if(abs(yawdd) > max_yawdd_) yawdd = yawdd / abs(yawdd) * max_yawdd_;
     }
     else return;
-    trajectory_point.position_W.x() = p.x();
-    trajectory_point.position_W.y() = p.y();
-    trajectory_point.position_W.z() = p.z();
-    trajectory_point.velocity_W.x() = v.x();
-    trajectory_point.velocity_W.y() = v.y();
-    trajectory_point.velocity_W.z() = v.z();
-    trajectory_point.acceleration_W.x() = a.x();
-    trajectory_point.acceleration_W.y() = a.y();
-    trajectory_point.acceleration_W.z() = a.z();
-
-    trajectory_point.setFromYaw(yaw);
-    trajectory_point.setFromYawRate(yawd);
-    trajectory_point.setFromYawAcc(yawdd);
-
-    mav_msgs::msgMultiDofJointTrajectoryPointFromEigen(trajectory_point, &trajectory_point_msg);
-    samples_array.points.push_back(trajectory_point_msg);
-    control_pub_.publish(samples_array);
+    PublishSetpoint(p, v, a, yaw, yawd, yawdd);
     Showcmd(p, yaw);
 }
 
@@ -299,13 +312,19 @@ int main(int argc, char** argv){
     google::ParseCommandLineFlags(&argc, &argv, true);
     google::InstallFailureSignalHandler();
 
+    string ns = ros::this_node::getName();
     init_t_ = ros::WallTime::now().toSec();
     bool auto_takeoff;
     traj_state_ = -1;
     ready_ = false;
-    control_pub_ = nh.advertise < trajectory_msgs::MultiDOFJointTrajectory
-        > ("/command/trajectory", 5);
-    string ns = ros::this_node::getName();
+    nh_private.param(ns + "/command_topic", command_topic_, std::string("/command/trajectory"));
+    nh_private.param(ns + "/use_pose_setpoint", use_pose_setpoint_, true);
+    ROS_INFO("use_pose_setpoint: %d", use_pose_setpoint_);
+    ROS_INFO("command_topic: %s", command_topic_.c_str());
+    if(use_pose_setpoint_)
+        control_pose_pub_ = nh.advertise<geometry_msgs::PoseStamped>(command_topic_, 5);
+    else
+        control_traj_pub_ = nh.advertise<trajectory_msgs::MultiDOFJointTrajectory>(command_topic_, 5);
     show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns + "/traj_show", 5);
     traj_sub_ = nh.subscribe("/trajectory_cmd", 1, &TrajCallback);
     run_timer_ = nh.createTimer(ros::Duration(0.033), &RunCallback);

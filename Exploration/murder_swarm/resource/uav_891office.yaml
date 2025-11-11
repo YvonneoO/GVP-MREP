@@ -31,12 +31,12 @@ block_map/bline_occ_range: 0.8
 block_map/swarm_tol: 0.3
 block_map/swarm_send_delay: 2.0
 block_map/swarm_pub_thresh: 0.975
-block_map/minX: -25.0
-block_map/minY: -25.0
+block_map/minX: -18.0
+block_map/minY: -15.5
 block_map/minZ: -0.1
-block_map/maxX: 25.0
-block_map/maxY: 25.0
-block_map/maxZ: 6
+block_map/maxX: 21.0
+block_map/maxY: 19.0
+block_map/maxZ: 4.0
 block_map/blockX: 15
 block_map/blockY: 15
 block_map/blockZ: 15
@@ -82,12 +82,12 @@ EXP/finish_hold_duration: 15.0
 Exp/robot_sizeX: 0.5
 Exp/robot_sizeY: 0.5
 Exp/robot_sizeZ: 0.5
-Exp/minX: -25.0
-Exp/minY: -25.0
+Exp/minX: -18.0
+Exp/minY: -15.5
 Exp/minZ: -0.1
-Exp/maxX: 25.0
-Exp/maxY: 25.0
-Exp/maxZ: 6
+Exp/maxX: 21.0
+Exp/maxY: 19.0
+Exp/maxZ: 4.0
 Exp/traj_length: 10.0
 Exp/local_path_search: 1000
 Exp/global_path_search: 3000
@@ -165,6 +165,9 @@ opt/WeiT: 200.0
 opt/smoothingEps: 0.01
 opt/integralIntervs: 16
 opt/RelCostTolL: 1.0e-5
+
+use_pose_setpoint: true
+command_topic: /uav/setpoint
 
 Computation/data_num: 3
 Computation/dir: /home/yqqy/GVP-MREP/src/GVP-MREP/data/UAV/891office
