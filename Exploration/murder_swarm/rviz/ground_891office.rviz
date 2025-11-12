@@ -5,13 +5,17 @@ Panels:
     Property Tree Widget:
       Expanded:
         - /Global Options1
+        - /Axes1
         - /Map1
         - /Map1/MapVis1
         - /Map1/MapVis1/Status1
         - /Map1/MapVis11/Status1
         - /Map1/DTG1
         - /Pose1
-        - /Path1
+        - /Pose1/odom/ugv1/Shape1
+        - /Traj1
+        - /Traj1/Trajs1
+        - /Marker10
       Splitter Ratio: 0.5
     Tree Height: 1106
   - Class: rviz/Selection
@@ -181,7 +185,7 @@ Visualization Manager:
           Shape:
             Alpha: 1
             Axes Length: 1
-            Axes Radius: 0.10000000149011612
+            Axes Radius: 0.30000001192092896
             Color: 255; 25; 0
             Head Length: 0.30000001192092896
             Head Radius: 0.10000000149011612
@@ -913,21 +917,21 @@ Visualization Manager:
       Queue Size: 100
       Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /murder_1/LowResMap/Nodes
       Name: r1/lrm_Nodes
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Class: rviz/MarkerArray
-      Enabled: true
+      Enabled: false
       Marker Topic: /murder_2/LowResMap/Nodes
       Name: r2/lrm_Nodes
       Namespaces:
-        "": true
+        {}
       Queue Size: 100
-      Value: true
+      Value: false
     - Alpha: 1
       Buffer Length: 1
       Class: rviz/Path
@@ -964,6 +968,14 @@ Visualization Manager:
       Transport Hint: raw
       Unreliable: false
       Value: false
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /ugv/sparse_waypoints_viz
+      Name: Marker
+      Namespaces:
+        sparse_waypoints_viz: true
+      Queue Size: 100
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -992,7 +1004,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 47.52800750732422
+      Distance: 52.01731872558594
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -1000,17 +1012,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 1.4688640832901
-        Y: -0.3852158188819885
-        Z: 0.7849245667457581
+        X: 1.118094563484192
+        Y: -3.180023193359375
+        Z: 4.711781024932861
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.139797329902649
+      Pitch: 1.324797511100769
       Target Frame: <Fixed Frame>
-      Yaw: 3.079528331756592
+      Yaw: 4.679502964019775
     Saved: ~
 Window Geometry:
   Displays:

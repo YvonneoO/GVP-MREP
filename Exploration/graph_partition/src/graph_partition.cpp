@@ -506,7 +506,7 @@ void GraphVoronoiPartition::GetLocalFNodes(const Eigen::Vector4d &c_state, const
         f_paths.emplace_back(*path_it);
     }
     // Debug(debug_points, visualization_msgs::Marker::SPHERE_LIST, 0);
-
+    ROS_INFO("[GraphVoronoiPartition::GetLocalFNodes] d_f_v size:%d", d_f_v.size());
     /* find the closest fn */
     if(d_f_v.size() > 0){
         int best_f, best_v;
@@ -638,7 +638,12 @@ void GraphVoronoiPartition::GetLocalFNodes(const Eigen::Vector4d &c_state, const
         // cout<<"t_state:"<<t_state.transpose()<<endl;
     }
     else exp_state = 2;
-
+    if (exp_state == 1) {
+        ROS_INFO("[GraphVoronoiPartition::GetLocalFNodes] found best exp. first:%f, h_id:%d, exp_state:%d", best_exp.first, h_id, exp_state);
+    }
+    else if (exp_state == 2) {
+        ROS_INFO("[GraphVoronoiPartition::GetLocalFNodes] no best exp and path found");
+    }
     return;
 }
 

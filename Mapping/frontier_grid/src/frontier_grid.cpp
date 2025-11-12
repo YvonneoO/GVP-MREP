@@ -268,12 +268,14 @@ bool FrontierGrid::SampleVps(list<int> &idxs){
                 }
             }
         }
+        ROS_INFO("[FrontierGrid::SampleVps] dieing vp num:%d", dieing_vps.size());
         int alive_num = 0;
         for(int h_id = 0; h_id < samp_num_; h_id++){
             if(f_grid_[idx].local_vps_[h_id] != 2){
                 alive_num++;
             }
         }
+        ROS_INFO("[FrontierGrid::SampleVps] alive vp num:%d, min vp num:%d", alive_num, min_vp_num_);
         if(alive_num < min_vp_num_){
             f_grid_[idx].f_state_ = 2;
             if(!f_grid_[idx].flags_[2]){
@@ -653,7 +655,7 @@ bool FrontierGrid::SampleVps(){
 }
 
 void FrontierGrid::SampleVpsCallback(const ros::TimerEvent &e){
-    // cout<<"sample num:"<<exploring_frontiers_.size()<<endl;
+    cout<<"[FrontierGrid::SampleVpsCallback] sample num:"<<exploring_frontiers_.size()<<endl;
     SampleVps(exploring_frontiers_);
     exploring_frontiers_.clear();
     sample_flag_ = true;

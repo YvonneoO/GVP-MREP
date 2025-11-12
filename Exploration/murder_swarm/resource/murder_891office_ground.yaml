@@ -45,7 +45,7 @@ block_map/swarm_pub_thresh: 0.975 # map sharing threshold
 block_map/minX: -18.0
 block_map/minY: -15.5
 block_map/minZ: -0.1
-block_map/maxX: 21.0
+block_map/maxX: 20.0
 block_map/maxY: 19.0
 block_map/maxZ: 4.0
 block_map/blockX: 15
@@ -83,7 +83,7 @@ Exp/robot_sizeZ: 0.8
 Exp/minX: -18.0
 Exp/minY: -15.5
 Exp/minZ: -0.1
-Exp/maxX: 21.0
+Exp/maxX: 20.0
 Exp/maxY: 19.0
 Exp/maxZ: 4.0
 Exp/traj_length: 10.0 # max path length to be considered for corridor generation

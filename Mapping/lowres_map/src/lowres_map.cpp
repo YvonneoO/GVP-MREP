@@ -461,10 +461,10 @@ void LowResMap::ClearInfeasible(vector<Eigen::Vector3d> &occ_list){
         }
         
         // Log points that are close to the robot and are marking nodes as occupied
-        double dist_from_robot = (*ocit - Robot_pos_).norm();
-        if (dist_from_robot < 1.0) { 
-            ROS_WARN("Setting XNode from point (%.2f, %.2f, %.2f) close to robot (dist %.2f) in ClearInfeasible", ocit->x(), ocit->y(), ocit->z(), dist_from_robot);
-        }
+        // double dist_from_robot = (*ocit - Robot_pos_).norm();
+        // if (dist_from_robot < 1.0) { 
+        //     ROS_WARN("Setting XNode from point (%.2f, %.2f, %.2f) close to robot (dist %.2f) in ClearInfeasible", ocit->x(), ocit->y(), ocit->z(), dist_from_robot);
+        // }
         SetXNode(*ocit, time + occ_duration_);
     }
 }
@@ -499,10 +499,10 @@ void LowResMap::ClearInfeasibleTopo(vector<Eigen::Vector3d> &occ_list){
         }
         
         // Log points that are close to the robot and are marking nodes as occupied
-        double dist_from_robot = (*ocit - Robot_pos_).norm();
-        if (dist_from_robot < 1.0) { 
-            ROS_WARN("Setting XNode from point (%.2f, %.2f, %.2f) close to robot (dist %.2f) in ClearInfeasibleTopo", ocit->x(), ocit->y(), ocit->z(), dist_from_robot);
-        }
+        // double dist_from_robot = (*ocit - Robot_pos_).norm();
+        // if (dist_from_robot < 1.0) { 
+        //     ROS_WARN("Setting XNode from point (%.2f, %.2f, %.2f) close to robot (dist %.2f) in ClearInfeasibleTopo", ocit->x(), ocit->y(), ocit->z(), dist_from_robot);
+        // }
         SetXNode(*ocit, time + occ_duration_);
     }
     idx_tie_clear_temp_ = idx_tie_clear_;
@@ -1352,6 +1352,7 @@ void LowResMap::LoadShowList(){
 
 void LowResMap::ShowGridLocal(const ros::TimerEvent& e){
     mtx_.lock();
+    ROS_INFO("[LowResMap::ShowGridLocal] Showblocklist_.size(): %ld", Showblocklist_.size());
     if(Showblocklist_.size() > 0 && node_pub_.getNumSubscribers() > 0){
         visualization_msgs::MarkerArray MKArray;
         MKArray.markers.resize(Showblocklist_.size()*2);

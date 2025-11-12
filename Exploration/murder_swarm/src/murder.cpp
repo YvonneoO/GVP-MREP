@@ -1,4 +1,5 @@
 #include<murder_swarm/murder.h>
+#include <limits>
 
 
 void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
@@ -67,6 +68,14 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     // CreateVisModel();
     last_safe_ = init_pose_.head(3);
     home_p_ = init_pose_.head(3);
+    p_ = init_pose_.head(3);
+    v_.setZero();
+    yaw_ = init_pose_(3);
+    yaw_v_ = 0.0;
+    plan_t_ = 0.0;
+    replan_t_ = -std::numeric_limits<double>::infinity();
+    robot_pose_.setIdentity();
+    robot_pose_.block(0, 3, 3, 1) = p_;
 
     last_map_update_t_ = ros::WallTime::now().toSec();
     traj_end_t_ = last_map_update_t_ - 0.1;
@@ -94,6 +103,7 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
     traj_pub_ = nh_.advertise<swarm_exp_msgs::LocalTraj>("/Murder/Traj", 1);
     if (is_ground_robot_) {
         sparse_waypoints_pub_ = nh_.advertise<nav_msgs::Path>("/ugv/sparse_waypoints", 10);
+        sparse_waypoints_viz_pub_ = nh_.advertise<visualization_msgs::Marker>("/ugv/sparse_waypoints_viz", 1);
     }
 }
 
@@ -1158,6 +1168,25 @@ void Murder::PublishSparseWaypoints(const vector<Eigen::Vector3d> &path,
 
     sparse_waypoints_pub_.publish(waypoint_msg);
     ROS_INFO("Published %lu sparse waypoints for UGV", waypoint_msg.poses.size());
+
+    // Publish visualization marker for sparse waypoints
+    visualization_msgs::Marker marker;
+    marker.header.frame_id = "world";
+    marker.header.stamp = ros::Time::now();
+    marker.ns = "sparse_waypoints_viz";
+    marker.id = 0;
+    marker.type = visualization_msgs::Marker::LINE_STRIP;
+    marker.action = visualization_msgs::Marker::ADD;
+    marker.scale.x = 0.1; // Line thickness
+    marker.color.r = 0.0;
+    marker.color.g = 1.0;
+    marker.color.b = 0.0;
+    marker.color.a = 1.0; // Opaque
+
+    for (const auto& pose_stamped : waypoint_msg.poses) {
+        marker.points.push_back(pose_stamped.pose.position);
+    }
+    sparse_waypoints_viz_pub_.publish(marker);
 }
 
 void Murder::ImgOdomCallback(const sensor_msgs::ImageConstPtr& img,

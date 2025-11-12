@@ -7,7 +7,7 @@ waypoint_sample_dt: 0.1
 
 # Linear/angular velocity limits
 desired_velocity: 2.2
-desired_angular_velocity: 0.8
+desired_angular_velocity: 1.0
 velocity_lowerbound: 0.5
 angular_velocity_lowerbound: 0.4
 
@@ -23,5 +23,6 @@ Kd_distance: 1.0
 
 # Goal tolerances and loop rate
 reach_goal_distance: 0.3
-yaw_goal_tolerance: 0.05
-control_rate: 20
+yaw_goal_tolerance: 0.3
+control_rate: 30
+

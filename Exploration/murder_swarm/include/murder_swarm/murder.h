@@ -144,7 +144,7 @@ private:
     FrontierGrid FG_;
     ColorManager CM_;
 
-    ros::Publisher show_pub_, traj_pub_, posevis_pub_, sparse_waypoints_pub_;
+    ros::Publisher show_pub_, traj_pub_, posevis_pub_, sparse_waypoints_pub_, sparse_waypoints_viz_pub_;
     ros::Subscriber odom_sub_;
     ros::NodeHandle nh_, nh_private_;
 

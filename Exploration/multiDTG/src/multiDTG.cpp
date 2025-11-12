@@ -583,7 +583,7 @@ void MultiDTG::DTGCommunicationCallback(const ros::TimerEvent &e){
                     if(F_depot_[f_msg.f_id]->cf_->f_state_ != 2){
                         for(auto &vs : F_depot_[f_msg.f_id]->cf_->local_vps_) if(vs != 2) alive_num++;
                         if(alive_num < FG_->min_vp_num_){
-                            
+                            ROS_INFO("[MultiDTG::DTGCommunicationCallback] alive vp num less than thresh, set explored f:%d", f_msg.f_id);
                             FG_->SetExplored(f_msg.f_id);
                             if(!SDM_->is_ground_) SDM_->SetDTGFn(f_msg.f_id, F_depot_[f_msg.f_id]->cf_->local_vps_, 1, false);
                         }

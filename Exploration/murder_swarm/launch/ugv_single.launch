@@ -55,7 +55,7 @@
     </node>
 
     <!-- traj_exc_node NOT needed for UGV - using sparse waypoints instead -->
-    <node name="traj_exc_node$(arg id)" pkg="traj_exc" type="ugv_traj_exec" output="log">
+    <node name="ugv_traj_exec_node" pkg="traj_exc" type="ugv_traj_exec" output="log">
         <rosparam command="load" file="$(find murder_swarm)/resource/ugv_traj_exec.yaml" />
         <remap from="/odom" to="/odom_ugv_world"/>
         <remap from="/trajectory_cmd" to="/Murder/Traj$(arg id)"/>
