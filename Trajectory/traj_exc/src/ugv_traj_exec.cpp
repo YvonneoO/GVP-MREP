@@ -46,12 +46,19 @@ double Ki_d_;
 double Kd_d_;
 double yaw_goal_tolerance_;
 double control_rate_;
+double initial_backward_distance_;
+double rotation_target_pos_thresh_;
+double rotation_target_yaw_thresh_;
+double goal_update_pos_thresh_;
+double goal_update_yaw_thresh_;
 
 int traj_state_;
 bool path_active_;
 bool rotation_mode_;
 bool have_odom_;
 bool initial_backward_done_;
+bool have_rotation_target_;
+bool have_goal_;
 Eigen::Vector3d initial_odom_pos_;
 
 geometry_msgs::Twist zero_cmd_;
@@ -59,6 +66,7 @@ std::string traj_topic_;
 std::string odom_topic_;
 std::string cmd_topic_;
 std::string sparse_waypoints_topic_;
+geometry_msgs::PoseStamped last_accepted_goal_;
 
 geometry_msgs::Quaternion YawToQuat(double yaw) {
     tf2::Quaternion q;
@@ -134,9 +142,13 @@ void OdomCallback(const nav_msgs::OdometryConstPtr& odom) {
     // Record initial position when odom is first received
     if (was_first_odom) {
         initial_odom_pos_ = robot_pos_;
-        initial_backward_done_ = false;
-        ROS_WARN("[INITIAL_BACKWARD] First odom received. Starting initial backward movement from [%.2f, %.2f, %.2f]", 
-                 initial_odom_pos_.x(), initial_odom_pos_.y(), initial_odom_pos_.z());
+        if (initial_backward_distance_ > 1e-3) {
+            initial_backward_done_ = false;
+            ROS_WARN("[INITIAL_BACKWARD] First odom received. Starting initial backward movement from [%.2f, %.2f, %.2f]", 
+                    initial_odom_pos_.x(), initial_odom_pos_.y(), initial_odom_pos_.z());
+        } else {
+            initial_backward_done_ = true;
+        }
     }
 }
 
@@ -162,6 +174,42 @@ bool IsYawAligned(const geometry_msgs::PoseStamped& target) {
     tf2::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
     double yaw_error = WrapAngle(yaw - robot_yaw_);
     return std::abs(yaw_error) <= yaw_goal_tolerance_;
+}
+
+double PoseYaw(const geometry_msgs::PoseStamped& pose) {
+    tf2::Quaternion tf_q;
+    tf2::fromMsg(pose.pose.orientation, tf_q);
+    double roll, pitch, yaw;
+    tf2::Matrix3x3(tf_q).getRPY(roll, pitch, yaw);
+    return yaw;
+}
+
+bool RotationTargetChanged(const geometry_msgs::PoseStamped& current_target,
+                           const geometry_msgs::PoseStamped& new_target) {
+    Eigen::Vector2d delta(new_target.pose.position.x - current_target.pose.position.x,
+                          new_target.pose.position.y - current_target.pose.position.y);
+    double yaw_delta = WrapAngle(PoseYaw(new_target) - PoseYaw(current_target));
+    return delta.norm() > rotation_target_pos_thresh_ ||
+           std::abs(yaw_delta) > rotation_target_yaw_thresh_;
+}
+
+bool GoalChanged(const geometry_msgs::PoseStamped& current_goal,
+                              const geometry_msgs::PoseStamped& new_goal) {
+    Eigen::Vector2d delta(new_goal.pose.position.x - current_goal.pose.position.x,
+                          new_goal.pose.position.y - current_goal.pose.position.y);
+    double yaw_delta = WrapAngle(PoseYaw(new_goal) - PoseYaw(current_goal));
+    return delta.norm() > goal_update_pos_thresh_ ||
+           std::abs(yaw_delta) > goal_update_yaw_thresh_;
+}
+
+void GoalDelta(const geometry_msgs::PoseStamped& a,
+               const geometry_msgs::PoseStamped& b,
+               double& pos_delta,
+               double& yaw_delta) {
+    Eigen::Vector2d delta(b.pose.position.x - a.pose.position.x,
+                          b.pose.position.y - a.pose.position.y);
+    pos_delta = delta.norm();
+    yaw_delta = WrapAngle(PoseYaw(b) - PoseYaw(a));
 }
 
 geometry_msgs::PoseStamped CreateRotationTarget(const geometry_msgs::PoseStamped& waypoint) {
@@ -195,6 +243,31 @@ void SparseWaypointsCallback(const nav_msgs::PathConstPtr& msg) {
         return;
     }
 
+    const geometry_msgs::PoseStamped& new_goal = msg->poses.back();
+    bool have_current_path_goal = path_active_ && !path_queue_.empty();
+    geometry_msgs::PoseStamped current_path_goal;
+    if (have_current_path_goal) current_path_goal = path_queue_.back();
+
+    bool keep_current_path = false;
+    double pos_delta_last = 0.0, yaw_delta_last = 0.0;
+    double pos_delta_curr = 0.0, yaw_delta_curr = 0.0;
+    if (have_goal_) {
+        GoalDelta(last_accepted_goal_, new_goal, pos_delta_last, yaw_delta_last);
+    }
+    if (have_current_path_goal) {
+        GoalDelta(current_path_goal, new_goal, pos_delta_curr, yaw_delta_curr);
+    }
+    bool small_vs_last = have_goal_ && !GoalChanged(last_accepted_goal_, new_goal);
+    bool small_vs_current = have_current_path_goal && !GoalChanged(current_path_goal, new_goal);
+    if (small_vs_last || small_vs_current) {
+        ROS_INFO("New sparse path final goal change below threshold (pos<=%.2f, yaw<=%.2f rad). Keeping current plan. Δpos_last=%.3f Δyaw_last=%.3f, Δpos_current=%.3f Δyaw_current=%.3f",
+                 goal_update_pos_thresh_, goal_update_yaw_thresh_,
+                 pos_delta_last, yaw_delta_last, pos_delta_curr, yaw_delta_curr);
+        keep_current_path = true;
+    }
+
+    if (keep_current_path) return;
+
     path_queue_.clear();
     for (const auto& pose : msg->poses) {
         path_queue_.push_back(pose);
@@ -204,12 +277,23 @@ void SparseWaypointsCallback(const nav_msgs::PathConstPtr& msg) {
     path_active_ = true;
     traj_state_ = 0; // Using 0 for sparse path
     ResetHeadingController();
+    last_accepted_goal_ = path_queue_.back();
+    have_goal_ = true;
     
     // Enter rotation mode for the first waypoint
     if (!path_queue_.empty() && have_odom_) {
-        rotation_target_ = CreateRotationTarget(path_queue_[target_idx_]);
-        rotation_mode_ = true;
-        ROS_INFO("Received and activated sparse waypoint path with %zu points. Rotating toward first waypoint.", path_queue_.size());
+        geometry_msgs::PoseStamped desired_target = CreateRotationTarget(path_queue_[target_idx_]);
+        bool need_update = !have_rotation_target_ || RotationTargetChanged(rotation_target_, desired_target);
+        rotation_target_ = desired_target;
+        have_rotation_target_ = true;
+        if (need_update && ShouldAlignYaw(rotation_target_)) {
+            rotation_mode_ = true;
+            ResetHeadingController();
+            ROS_INFO("Received sparse waypoint path (%zu points). Rotating toward first waypoint.", path_queue_.size());
+        } else {
+            rotation_mode_ = false;
+            ROS_INFO("Received sparse waypoint path (%zu points). Orientation change below threshold.", path_queue_.size());
+        }
     } else {
         rotation_mode_ = false;
         ROS_INFO("Received and activated sparse waypoint path with %zu points.", path_queue_.size());
@@ -306,33 +390,38 @@ void ControlLoop(const ros::TimerEvent&) {
     }
     if (!have_odom_) return;
 
-    // Handle initial backward movement (5m backwards from first odom position)
-    if (!initial_backward_done_) {
-        Eigen::Vector3d delta = robot_pos_ - initial_odom_pos_;
-        double distance_moved = delta.norm();
-        
-        // Check if we've moved 5m from initial position (backwards movement)
-        if (distance_moved >= 5.0) {
+    bool waypoint_command_ready = path_active_ && !path_queue_.empty();
+
+    // initial backward movement
+    if (initial_backward_distance_ > 1e-3 && !initial_backward_done_) {
+        if (waypoint_command_ready) {
             initial_backward_done_ = true;
-            ROS_WARN("[INITIAL_BACKWARD] Completed initial backward movement. Distance moved: %.2f m. Proceeding with normal waypoint following.", 
-                     distance_moved);
             PublishStop();
+        } else {
+            Eigen::Vector3d delta = robot_pos_ - initial_odom_pos_;
+            double distance_moved = delta.norm();
+
+            if (distance_moved >= initial_backward_distance_) {
+                initial_backward_done_ = true;
+                ROS_WARN("[INITIAL_BACKWARD] Completed initial backward movement. Distance moved: %.2f m. Proceeding with normal waypoint following.", 
+                         distance_moved);
+                PublishStop();
+                return;
+            }
+
+            geometry_msgs::Twist cmd;
+            cmd.linear.x = -desired_vel_;
+            cmd.linear.y = 0.0;
+            cmd.linear.z = 0.0;
+            cmd.angular.x = 0.0;
+            cmd.angular.y = 0.0;
+            cmd.angular.z = 0.0;
+
+            ROS_INFO("[INITIAL_BACKWARD] Moving backwards. Distance moved: %.2f/%.2f m, cmd.linear.x: %.2f", 
+                     distance_moved, initial_backward_distance_, cmd.linear.x);
+            cmd_pub_.publish(cmd);
             return;
         }
-        
-        // Move backwards at desired velocity (negative linear.x moves backwards)
-        geometry_msgs::Twist cmd;
-        cmd.linear.x = -desired_vel_;  // Negative for backward movement
-        cmd.linear.y = 0.0;
-        cmd.linear.z = 0.0;
-        cmd.angular.x = 0.0;
-        cmd.angular.y = 0.0;
-        cmd.angular.z = 0.0;  // No rotation during initial backward movement
-        
-        ROS_INFO("[INITIAL_BACKWARD] Moving backwards. Distance moved: %.2f/5.0 m, cmd.linear.x: %.2f", 
-                 distance_moved, cmd.linear.x);
-        cmd_pub_.publish(cmd);
-        return;
     }
 
     if (rotation_mode_) {
@@ -363,8 +452,10 @@ void ControlLoop(const ros::TimerEvent&) {
     if (!rotation_mode_ && path_active_ && !path_queue_.empty()) {
         geometry_msgs::PoseStamped first_target = path_queue_[target_idx_];
         geometry_msgs::PoseStamped rot_target = CreateRotationTarget(first_target);
-        if (ShouldAlignYaw(rot_target)) {
-            rotation_target_ = rot_target;
+        bool need_update = !have_rotation_target_ || RotationTargetChanged(rotation_target_, rot_target);
+        rotation_target_ = rot_target;
+        have_rotation_target_ = true;
+        if (need_update && ShouldAlignYaw(rotation_target_)) {
             rotation_mode_ = true;
             ResetHeadingController();
             // ROS_INFO("Entering rotation mode for waypoint %zu", target_idx_);
@@ -386,8 +477,9 @@ void ControlLoop(const ros::TimerEvent&) {
             ROS_INFO("UGV reached final waypoint. Publishing stop command.");
             PublishStop(); // Ensure stop command is sent immediately upon path completion
             if (traj_state_ == 2 && ShouldAlignYaw(target)) {
-                rotation_mode_ = true;
                 rotation_target_ = target;
+                have_rotation_target_ = true;
+                rotation_mode_ = true;
                 ResetHeadingController();
                 // PublishStop(); // This will be handled by rotation_mode_ logic
                 return;
@@ -395,15 +487,20 @@ void ControlLoop(const ros::TimerEvent&) {
             // If not entering rotation_mode, we already called PublishStop()
             return;
         }
-        // Move to next waypoint and enter rotation mode
+        // Move to next waypoint and enter rotation mode if necessary
         ++target_idx_;
         geometry_msgs::PoseStamped next_target = path_queue_[target_idx_];
-        rotation_target_ = CreateRotationTarget(next_target);
-        rotation_mode_ = true;
-        ResetHeadingController();
-        ROS_INFO("Reached waypoint %zu, rotating toward next waypoint (yaw: %f)", 
-                 target_idx_ - 1, std::atan2(next_target.pose.position.y - robot_pos_.y(),
-                                            next_target.pose.position.x - robot_pos_.x()));
+        geometry_msgs::PoseStamped desired_rotation = CreateRotationTarget(next_target);
+        bool need_update = !have_rotation_target_ || RotationTargetChanged(rotation_target_, desired_rotation);
+        rotation_target_ = desired_rotation;
+        have_rotation_target_ = true;
+        if (need_update && ShouldAlignYaw(rotation_target_)) {
+            rotation_mode_ = true;
+            ResetHeadingController();
+            ROS_INFO("Reached waypoint %zu, rotating toward next waypoint (yaw: %f)", 
+                     target_idx_ - 1, std::atan2(next_target.pose.position.y - robot_pos_.y(),
+                                                next_target.pose.position.x - robot_pos_.x()));
+        }
         return;
     }
 
@@ -444,31 +541,41 @@ void LoadParameters(ros::NodeHandle& nh_private) {
     ROS_INFO("cmd_topic: %s", cmd_topic_.c_str());
     nh_private.param("/waypoint_sample_dt", sample_dt_, 0.3);
     ROS_INFO("sample_dt: %f", sample_dt_);
-    nh_private.param("/desired_velocity", desired_vel_, 0.5);
-    nh_private.param("/desired_angular_velocity", desired_ang_vel_, 1.0);
+    nh_private.param("/desired_velocity", desired_vel_, 2.2);
+    nh_private.param("/desired_angular_velocity", desired_ang_vel_, 1.2);
     ROS_INFO("desired_ang_vel: %f", desired_ang_vel_);
-    nh_private.param("/reach_goal_distance", reach_goal_distance_, 0.2);
+    nh_private.param("/reach_goal_distance", reach_goal_distance_, 0.3);
     ROS_INFO("reach_goal_distance: %f", reach_goal_distance_);
-    nh_private.param("/velocity_lowerbound", vel_lower_bound_, 0.1);
+    nh_private.param("/velocity_lowerbound", vel_lower_bound_, 0.5);
     ROS_INFO("vel_lower_bound: %f", vel_lower_bound_);
-    nh_private.param("/angular_velocity_lowerbound", ang_vel_lower_bound_, 0.1);
+    nh_private.param("/angular_velocity_lowerbound", ang_vel_lower_bound_, 0.4);
     ROS_INFO("ang_vel_lower_bound: %f", ang_vel_lower_bound_);
-    nh_private.param("/Kp_angle", Kp_a_, 1.0);
+    nh_private.param("/Kp_angle", Kp_a_, 5.0);
     ROS_INFO("Kp_a: %f", Kp_a_);
     nh_private.param("/Ki_angle", Ki_a_, 0.0);
     ROS_INFO("Ki_a: %f", Ki_a_);
-    nh_private.param("/Kd_angle", Kd_a_, 0.0);
+    nh_private.param("/Kd_angle", Kd_a_, 0.2);
     ROS_INFO("Kd_a: %f", Kd_a_);
     nh_private.param("/Kp_distance", Kp_d_, 1.0);
     ROS_INFO("Kp_d: %f", Kp_d_);
-    nh_private.param("/Ki_distance", Ki_d_, 0.0);
+    nh_private.param("/Ki_distance", Ki_d_, 1.0);
     ROS_INFO("Ki_d: %f", Ki_d_);
-    nh_private.param("/Kd_distance", Kd_d_, 0.0);
+    nh_private.param("/Kd_distance", Kd_d_, 1.0);
     ROS_INFO("Kd_d: %f", Kd_d_);
-    nh_private.param("/yaw_goal_tolerance", yaw_goal_tolerance_, 0.05);
+    nh_private.param("/yaw_goal_tolerance", yaw_goal_tolerance_, 0.3);
     ROS_INFO("yaw_goal_tolerance: %f", yaw_goal_tolerance_);
     nh_private.param("/control_rate", control_rate_, 30.0);
     ROS_INFO("control_rate: %f", control_rate_);
+    nh_private.param("/initial_backward_distance", initial_backward_distance_, 5.0);
+    ROS_INFO("initial_backward_distance: %f", initial_backward_distance_);
+    nh_private.param("/rotation_target_pos_threshold", rotation_target_pos_thresh_, 0.2);
+    nh_private.param("/rotation_target_yaw_threshold", rotation_target_yaw_thresh_, 0.2);
+    ROS_INFO("rotation_target_pos_threshold: %f", rotation_target_pos_thresh_);
+    ROS_INFO("rotation_target_yaw_threshold: %f", rotation_target_yaw_thresh_);
+    nh_private.param("/goal_update_pos_threshold", goal_update_pos_thresh_, 0.5);
+    nh_private.param("/goal_update_yaw_threshold", goal_update_yaw_thresh_, 0.35);
+    ROS_INFO("goal_update_pos_threshold: %f", goal_update_pos_thresh_);
+    ROS_INFO("goal_update_yaw_threshold: %f", goal_update_yaw_thresh_);
 }
 
 int main(int argc, char** argv) {
@@ -486,6 +593,8 @@ int main(int argc, char** argv) {
     rotation_mode_ = false;
     have_odom_ = false;
     initial_backward_done_ = false;
+    have_rotation_target_ = false;
+    have_goal_ = false;
     target_idx_ = 0;
     integral_a_ = 0.0;
     error_a_last_ = 0.0;

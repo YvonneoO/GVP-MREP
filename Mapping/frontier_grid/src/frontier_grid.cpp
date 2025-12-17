@@ -5,6 +5,7 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     std::string ns = ros::this_node::getName();
     string sensor;
     bool show_frontier;
+    bool show_viewpoints;
     nh_private_.param(ns + "/is_ground_robot", 
         is_ground_robot_, false);
     std::cout << "FG: is_ground_robot_: " << is_ground_robot_ << std::endl;
@@ -68,6 +69,8 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         ray_samp_dist2_, 0.1);    
     nh_private_.param(ns + "/Frontier/show_frontier", 
         show_frontier, true);
+    nh_private_.param(ns + "/Frontier/show_viewpoints",
+        show_viewpoints, false);
     nh_private_.param(ns + "/Frontier/min_vp_num", 
         min_vp_num_, 6);    
     nh_private_.param(ns + "/Exp/robot_sizeX", 
@@ -138,9 +141,14 @@ void FrontierGrid::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         sample_timer_ = nh.createTimer(ros::Duration(0.33), &FrontierGrid::SampleVpsCallback, this);
         lazy_samp_timer_ = nh.createTimer(ros::Duration(0.2), &FrontierGrid::LazySampleCallback, this);
     }
-    if(show_frontier)
+    show_frontier_ = show_frontier;
+    show_viewpoints_ = show_viewpoints;
+    if(show_frontier_ || show_viewpoints_)
         show_timer_ = nh.createTimer(ros::Duration(0.5), &FrontierGrid::ShowVpsCallback, this);
-    show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns+"/Frontier/grid", 1);
+    if(show_frontier_)
+        show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns+"/Frontier/grid", 1);
+    if(show_viewpoints_)
+        vp_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns+"/Frontier/viewpoints", 1);
     debug_pub_ = nh.advertise<visualization_msgs::Marker>("/Frontier/debug", 1);
     // //FOV down sample
     if(sensor == "Depth_Camera"){
@@ -940,58 +948,59 @@ void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
     // cout<<"SHOW!!!!!!!!!!!!!!!!!!!!!!!"<<endl;//debug
     ROS_INFO("[FG::ShowVpsCallback] Timer triggered");
     Eigen::Vector4d vp_pose;
+    std_msgs::ColorRGBA cl;
+    bool publish_frontiers = show_frontier_ && show_pub_;
     visualization_msgs::MarkerArray mka;
     visualization_msgs::Marker mk1, mk2;
-    mk1.header.frame_id = "world";
-    mk1.header.stamp = ros::Time::now();
-    mk1.id = 1;
-    mk1.action = visualization_msgs::Marker::ADD;
-    mk1.type = visualization_msgs::Marker::CUBE;
-    mk1.scale.x = node_scale_;
-    mk1.scale.y = node_scale_;
-    mk1.scale.z = node_scale_;
-    mk1.color.a = 0.2;
-    mk1.color.b = 0.7;
-    mk1.color.g = 0.6;
-    mk1.color.r = 0.6;
-    mk1.pose.position.x = 0;
-    mk1.pose.position.y = 0;
-    mk1.pose.position.z = 0;
-    mk1.pose.orientation.x = 0;
-    mk1.pose.orientation.y = 0;
-    mk1.pose.orientation.z = 0;
-    mk1.pose.orientation.w = 1;
-    mk2 = mk1;
-    mk2.type = visualization_msgs::Marker::LINE_LIST;
-    mk2.scale.x = 0.02;
-    mk2.scale.y = 0.02;
-    mk2.scale.z = 0.02;
-    std_msgs::ColorRGBA cl;
-    // ROS_WARN("ShowVpsCallback0");
-    // for(int f = 0; f < f_grid_.size(); f++){
+    if(publish_frontiers){
+        mk1.header.frame_id = "world";
+        mk1.header.stamp = ros::Time::now();
+        mk1.id = 1;
+        mk1.action = visualization_msgs::Marker::ADD;
+        mk1.type = visualization_msgs::Marker::CUBE;
+        mk1.scale.x = node_scale_;
+        mk1.scale.y = node_scale_;
+        mk1.scale.z = node_scale_;
+        mk1.color.a = 0.2;
+        mk1.color.b = 0.7;
+        mk1.color.g = 0.6;
+        mk1.color.r = 0.6;
+        mk1.pose.position.x = 0;
+        mk1.pose.position.y = 0;
+        mk1.pose.position.z = 0;
+        mk1.pose.orientation.x = 0;
+        mk1.pose.orientation.y = 0;
+        mk1.pose.orientation.z = 0;
+        mk1.pose.orientation.w = 1;
+        mk2 = mk1;
+        mk2.type = visualization_msgs::Marker::LINE_LIST;
+        mk2.scale.x = 0.02;
+        mk2.scale.y = 0.02;
+        mk2.scale.z = 0.02;
+    }
+
     for(auto &f : exploring_frontiers_show_){
-        // ROS_WARN("ShowVpsCallback0.0");
         auto &frontier = f_grid_[f];
-        if(frontier.f_state_ == 0)
-            continue;
-        // ROS_WARN("ShowVpsCallback0.1");
-        if(frontier.f_state_ == 2){
-            explored_frontiers_show_.push_back(f);
+        if(frontier.f_state_ == 0){
+            frontier.flags_.reset(2);
             continue;
         }
-        // ROS_WARN("ShowVpsCallback0.2");
+        if(frontier.f_state_ == 2){
+            explored_frontiers_show_.push_back(f);
+            frontier.flags_.reset(2);
+            continue;
+        }
         frontier.flags_.reset(2);
+        if(!publish_frontiers) continue;
         mk1.action = visualization_msgs::Marker::ADD;
         mk2.action = visualization_msgs::Marker::ADD;
-        // mk1.points.clear();
         mk2.points.clear();
         mk1.id = f * 2;
         mk2.id = f * 2 + 1;
-        // if(f_grid_[f].owner_ != 0 && f_grid_[f].owner_ != 1 && f_grid_[f].owner_ != 2){
-        //     for(int j = 0; j < 10; j++)
-        //         ROS_ERROR("id:%d owner:%d", SDM_->self_id_, f_grid_[f].owner_);
-        // }
         cl = CM_->Id2Color(f_grid_[f].owner_, 0.15);
+        if(f_grid_[f].owner_ == 0){
+            cl.a = 0.5;
+        }
         mk1.color = cl;
         mk1.pose.position.x = frontier.center_(0);
         mk1.pose.position.y = frontier.center_(1);
@@ -1001,25 +1010,28 @@ void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
         mk1.scale.z = frontier.up_(2) - frontier.down_(2);
         mk2.color = cl;
         mk2.color.a = 0.3;
-        for(int vp_id = 0; vp_id < samp_num_; vp_id++){
-            if(frontier.local_vps_[vp_id] == 1 && GetVp(f, vp_id, vp_pose)){
-                // LoadVpLines(mk2, vp_pose);
-            }
-        }
+        // for(int vp_id = 0; vp_id < samp_num_; vp_id++){
+        //     if(frontier.local_vps_[vp_id] == 1 && GetVp(f, vp_id, vp_pose)){
+        //         // LoadVpLines(mk2, vp_pose);
+        //     }
+        // }
         mka.markers.emplace_back(mk1);
         mka.markers.emplace_back(mk2);
     }
-    mk1.points.clear();
-    mk2.points.clear();
-    mk1.action = visualization_msgs::Marker::ADD;
-    mk2.action = visualization_msgs::Marker::DELETE;
-    mk1.color.a = 0.01;
-    mk1.color.b = 0.7;
-    mk1.color.g = 0.7;
-    mk1.color.r = 0.7;
+    if(publish_frontiers){
+        mk1.points.clear();
+        mk2.points.clear();
+        mk1.action = visualization_msgs::Marker::ADD;
+        mk2.action = visualization_msgs::Marker::DELETE;
+        mk1.color.a = 0.01;
+        mk1.color.b = 0.7;
+        mk1.color.g = 0.7;
+        mk1.color.r = 0.7;
+    }
     for(auto &f : explored_frontiers_show_){
         auto &frontier = f_grid_[f];
         frontier.flags_.reset(2);
+        if(!publish_frontiers) continue;
         mk1.id = f * 2;
         mk2.id = f * 2 + 1;
         mk1.pose.position.x = frontier.center_(0);
@@ -1032,8 +1044,79 @@ void FrontierGrid::ShowVpsCallback(const ros::TimerEvent &e){
         mka.markers.emplace_back(mk1);
         mka.markers.emplace_back(mk2);
     }
-    // ROS_WARN("ShowVpsCallback2");
-    show_pub_.publish(mka);
+    if(publish_frontiers){
+        show_pub_.publish(mka);
+    }
+
+    if(show_viewpoints_ && vp_pub_){
+        visualization_msgs::MarkerArray vp_array;
+        visualization_msgs::Marker vp_points, vp_dirs;
+        vp_points.header.frame_id = "world";
+        vp_points.header.stamp = ros::Time::now();
+        vp_points.ns = "frontier_viewpoints";
+        vp_points.id = 0;
+        vp_points.type = visualization_msgs::Marker::SPHERE_LIST;
+        vp_points.scale.x = 0.15;
+        vp_points.scale.y = 0.15;
+        vp_points.scale.z = 0.15;
+        vp_points.color.a = 1.0;
+        vp_dirs = vp_points;
+        vp_dirs.ns = "frontier_viewpoint_dirs";
+        vp_dirs.id = 1;
+        vp_dirs.type = visualization_msgs::Marker::LINE_LIST;
+        vp_dirs.scale.x = 0.03;
+        vp_dirs.scale.y = 0.03;
+        vp_dirs.scale.z = 0.03;
+
+        for(auto &f : exploring_frontiers_show_){
+            auto &frontier = f_grid_[f];
+            if(frontier.f_state_ != 1) continue;
+            cl = CM_->Id2Color(frontier.owner_, 0.6);
+            if(cl.a < 0.5) cl.a = 0.5;
+            for(int vp_id = 0; vp_id < samp_num_; vp_id++){
+                if(frontier.local_vps_[vp_id] != 1) continue;
+                if(!GetVp(f, vp_id, vp_pose)) continue;
+                geometry_msgs::Point pt;
+                pt.x = vp_pose(0);
+                pt.y = vp_pose(1);
+                pt.z = vp_pose(2);
+                vp_points.points.push_back(pt);
+                vp_points.colors.push_back(cl);
+
+                Eigen::Vector3d dir = frontier.center_ - Eigen::Vector3d(vp_pose(0), vp_pose(1), vp_pose(2));
+                double norm = dir.norm();
+                if(norm < 1e-3) continue;
+                dir /= norm;
+                geometry_msgs::Point dir_end = pt;
+                dir_end.x += dir(0) * 0.6;
+                dir_end.y += dir(1) * 0.6;
+                dir_end.z += dir(2) * 0.6;
+                vp_dirs.points.push_back(pt);
+                vp_dirs.points.push_back(dir_end);
+                vp_dirs.colors.push_back(cl);
+                vp_dirs.colors.push_back(cl);
+            }
+        }
+
+        if(vp_points.points.empty()){
+            vp_points.action = visualization_msgs::Marker::DELETE;
+        }
+        else{
+            vp_points.action = visualization_msgs::Marker::ADD;
+        }
+
+        if(vp_dirs.points.empty()){
+            vp_dirs.action = visualization_msgs::Marker::DELETE;
+        }
+        else{
+            vp_dirs.action = visualization_msgs::Marker::ADD;
+        }
+
+        vp_array.markers.emplace_back(vp_points);
+        vp_array.markers.emplace_back(vp_dirs);
+        vp_pub_.publish(vp_array);
+    }
+
     explored_frontiers_show_.clear();
     exploring_frontiers_show_.clear();
 }

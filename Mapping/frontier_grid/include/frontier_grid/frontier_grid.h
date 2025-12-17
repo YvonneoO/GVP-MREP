@@ -226,7 +226,7 @@ private:
     // int samp_free_thresh_;
     
     int scan_count_;
-    ros::Publisher show_pub_, debug_pub_;
+    ros::Publisher show_pub_, debug_pub_, vp_pub_;
     ros::Timer sample_timer_, show_timer_, lazy_samp_timer_;
     //FOV down sample
     int FOV_h_num_, FOV_v_num_; 
@@ -256,6 +256,8 @@ private:
     //swarm_data
     bool use_swarm_;
     SwarmDataManager *SDM_;
+    bool show_frontier_;
+    bool show_viewpoints_;
 
 };
 

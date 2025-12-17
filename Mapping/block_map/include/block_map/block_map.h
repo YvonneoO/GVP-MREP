@@ -145,6 +145,7 @@ private:
     void InsertDepthCallback(const sensor_msgs::ImageConstPtr &img);
     void CamParamCallback(const sensor_msgs::CameraInfoConstPtr &param);
     void setCamParam();
+    void SeedInitialFreeCube(const Eigen::Vector3d &robot_pos);
 
     //Timer
     void ShowMapCallback(const ros::TimerEvent &e);
@@ -228,6 +229,10 @@ private:
     bool depth_;
     bool setCamParam_;
     bool have_odom_, have_cam_param_, show_block_;
+    bool initial_scan_;
+    bool initial_scan_applied_;
+    bool initial_free_pts_pending_;
+    std::vector<Eigen::Vector3d> initial_free_pts_;
     double last_update_, update_interval_, show_freq_, last_odom_;
     //blocks to be shown
     vector<int> changed_blocks_;
@@ -257,6 +262,10 @@ private:
     double swarm_send_delay_, swarm_tol_, swarm_pub_thresh_, bline_occ_range_;
     tr1::unordered_map<int, int> *swarm_filter_dict_;
     bool vis_mode_;
+    // ground robot support
+    bool is_ground_robot_;
+    double robot_height_;
+    double ground_filter_margin_;
     // ofstream debug_l_;
 
 };

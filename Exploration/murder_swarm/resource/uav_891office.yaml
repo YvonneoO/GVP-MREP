@@ -22,6 +22,7 @@ Frontier/livox_ver_low: -0.175
 Frontier/ray_samp_dist1: 0.2
 Frontier/ray_samp_dist2: 0.1
 Frontier/show_frontier: true
+Frontier/show_viewpoints: true
 Frontier/min_vp_num: 2
 
 block_map/RobotVisX: 0.81
@@ -127,9 +128,9 @@ MR_DTG/resY: 2.0
 MR_DTG/resZ: 2.0
 MR_DTG/show_edge_details: false
 
-LowResMap/localgraph_sizex: 14.0
-LowResMap/localgraph_sizey: 14.0
-LowResMap/localgraph_sizez: 8.0
+LowResMap/localgraph_sizex: 16.0
+LowResMap/localgraph_sizey: 16.0
+LowResMap/localgraph_sizez: 12.0
 LowResMap/node_x: 0.6
 LowResMap/node_y: 0.6
 LowResMap/node_z: 0.6

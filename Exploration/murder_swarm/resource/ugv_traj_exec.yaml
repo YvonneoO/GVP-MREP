@@ -1,13 +1,14 @@
 traj_topic: "/trajectory_cmd"
-odom_topic: "/odom"
+odom_topic: "/ugv_odom_world"
 cmd_topic: "/cmd_vel"
+sparse_waypoints_topic: "/ugv/sparse_waypoints"
 
 # Sampling interval (seconds) along the polynomial trajectory
 waypoint_sample_dt: 0.1
 
 # Linear/angular velocity limits
-desired_velocity: 2.2
-desired_angular_velocity: 1.0
+desired_velocity: 2.5
+desired_angular_velocity: 1.2
 velocity_lowerbound: 0.5
 angular_velocity_lowerbound: 0.4
 
@@ -26,3 +27,5 @@ reach_goal_distance: 0.3
 yaw_goal_tolerance: 0.3
 control_rate: 30
 
+# Initial backward movement distance
+initial_backward_distance: 5.0

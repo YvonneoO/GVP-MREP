@@ -1,6 +1,5 @@
 # ugv / spot, 2d motion
-is_ground_robot: true
-robot_height: 0.14
+is_ground_robot: false
 
 Frontier/sample_max_range: 2.2 # max dist from vp to ft grid center
 Frontier/grid_scale: 2.0 # ft grid cell size
@@ -32,7 +31,8 @@ Frontier/cam_ver: 1.046
 Frontier/ray_samp_dist1: 0.2 # 1st raycasting step size -> determine ft boundary
 Frontier/ray_samp_dist2: 0.1 # finer raycasting step size -> info gain calc
 Frontier/show_frontier: true # show vps in rviz
-Frontier/min_vp_num: 6 # min alive vps in a ft grid to remain exploring (infeasible to complete or not worth completing)
+Frontier/show_viewpoints: true
+Frontier/min_vp_num: 2 # min alive vps in a ft grid to remain exploring (infeasible to complete or not worth completing)
 
 # filter point cloud for robot body
 block_map/RobotVisX: 1.2
@@ -127,9 +127,9 @@ MR_DTG/resY: 2.0
 MR_DTG/resZ: 2.0
 MR_DTG/show_edge_details: false
 
-LowResMap/localgraph_sizex: 14.0
-LowResMap/localgraph_sizey: 14.0
-LowResMap/localgraph_sizez: 8.0
+LowResMap/localgraph_sizex: 16.0
+LowResMap/localgraph_sizey: 16.0
+LowResMap/localgraph_sizez: 12.0
 # coarse min unit for traversability check
 LowResMap/node_x: 0.6
 LowResMap/node_y: 0.6

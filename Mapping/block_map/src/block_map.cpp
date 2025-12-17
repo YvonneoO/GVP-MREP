@@ -5,6 +5,11 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     nh_ = nh;
     nh_private_ = nh_private;
     std::string ns = ros::this_node::getName();
+    nh_private_.param(ns + "/initial_scan",
+        initial_scan_, false);
+    initial_scan_applied_ = !initial_scan_;
+    initial_free_pts_pending_ = false;
+    initial_free_pts_.clear();
     
     vector<double> CR, CB, CG;
     bool depth;
@@ -113,7 +118,12 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
         bline_occ_range_, 0.7);
     nh_private.param(ns + "/block_map/vis_mode", 
         vis_mode_, false);
-
+    nh_private.param(ns + "/is_ground_robot",
+        is_ground_robot_, false);
+    nh_private.param(ns + "/robot_height",
+        robot_height_, 0.14);
+    nh_private.param(ns + "/LowResMap/ground_filter_margin",
+        ground_filter_margin_, 0.05);
     // nh_private.param(ns + "/Exp/drone_num", 
     //     drone_num, 0);
     // nh_private.param(ns + "/Exp/UAV_id", 
@@ -311,6 +321,9 @@ void BlockMap::OdomCallback(const nav_msgs::OdometryConstPtr &odom){
     body2world.block(0, 0, 3, 3) = rot.matrix();
 
     cam2world_ = body2world * cam2body_;
+    if(initial_scan_ && !initial_scan_applied_){
+        SeedInitialFreeCube(body2world.block(0, 3, 3, 1));
+    }
     AwakeBlocks(cam2world_.block(0, 3, 3, 1), max_range_);
     bline_ = false;
     for(double x = 0; x < 0.51; x += resolution_){
@@ -681,6 +694,12 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
     int block_id, vox_id;
 
     newly_register_idx_.clear();
+    if(initial_free_pts_pending_){
+        newly_register_idx_.insert(newly_register_idx_.end(),
+            initial_free_pts_.begin(), initial_free_pts_.end());
+        initial_free_pts_.clear();
+        initial_free_pts_pending_ = false;
+    }
     cam3i = PostoId3(cam2world_.block(0,3,3,1));
     if(InsideMap(cam3i)){
         LoadSwarmFilter();
@@ -798,6 +817,12 @@ void BlockMap::InsertImg(const sensor_msgs::ImageConstPtr &depth){
 
     cam3i = PostoId3(cam2world_.block(0,3,3,1));
     newly_register_idx_.clear();
+    if(initial_free_pts_pending_){
+        newly_register_idx_.insert(newly_register_idx_.end(),
+            initial_free_pts_.begin(), initial_free_pts_.end());
+        initial_free_pts_.clear();
+        initial_free_pts_pending_ = false;
+    }
 
     if(InsideMap(cam3i)){
         LoadSwarmFilter();
@@ -970,6 +995,58 @@ void BlockMap::ProjectToImg(const sensor_msgs::PointCloud2ConstPtr &pcl, vector<
     }
 }
 
+void BlockMap::SeedInitialFreeCube(const Eigen::Vector3d &robot_pos){
+    if(initial_scan_applied_) return;
+    if(!InsideMap(robot_pos)){
+        ROS_WARN("[BM] initial scan enabled but robot pose is outside map bounds");
+        initial_scan_applied_ = true;
+        return;
+    }
+    const double half_size = 1.0;
+    initial_free_pts_.clear();
+    AwakeBlocks(robot_pos, half_size + resolution_);
+
+    Eigen::Vector3d half_vec = Eigen::Vector3d::Ones() * half_size;
+    Eigen::Vector3d low = (robot_pos - half_vec).cwiseMax(map_lowbd_);
+    Eigen::Vector3d up = (robot_pos + half_vec).cwiseMin(map_upbd_);
+    Eigen::Vector3d eps = Eigen::Vector3d::Ones() * 1e-3;
+    Eigen::Vector3i low_id = PostoId3(low);
+    Eigen::Vector3i up_id = PostoId3(up - eps);
+    for(int dim = 0; dim < 3; dim++){
+        low_id(dim) = max(0, min(voxel_num_(dim) - 1, low_id(dim)));
+        up_id(dim) = max(0, min(voxel_num_(dim) - 1, up_id(dim)));
+    }
+    if(low_id(0) > up_id(0) || low_id(1) > up_id(1) || low_id(2) > up_id(2)){
+        initial_scan_applied_ = true;
+        return;
+    }
+    Eigen::Vector3d offset(0.5, 0.5, 0.5);
+    size_t seeded = 0;
+    for(int x = low_id(0); x <= up_id(0); ++x){
+        for(int y = low_id(1); y <= up_id(1); ++y){
+            for(int z = low_id(2); z <= up_id(2); ++z){
+                Eigen::Vector3d idx_d(x, y, z);
+                Eigen::Vector3d center = origin_ + (idx_d + offset) * resolution_;
+                int block_id, vox_id;
+                if(!GetVox(block_id, vox_id, center)) continue;
+                if(GBS_[block_id]->odds_log_[vox_id] >= thr_min_) continue;
+                GBS_[block_id]->odds_log_[vox_id] = thr_min_;
+                if(show_block_ && !GBS_[block_id]->show_){
+                    changed_blocks_.push_back(block_id);
+                    GBS_[block_id]->show_ = true;
+                }
+                initial_free_pts_.push_back(center);
+                seeded++;
+            }
+        }
+    }
+    initial_free_pts_pending_ = !initial_free_pts_.empty();
+    initial_scan_applied_ = true;
+    if(seeded > 0){
+        ROS_INFO("[BM] seeded %zu voxels as initial free space", seeded);
+    }
+}
+
 void BlockMap::AwakeBlocks(const Eigen::Vector3d &center, const double &range){
     Eigen::Vector3d upbd, lowbd;
     Eigen::Vector3i upbd_id3, lowbd_id3; 
@@ -1052,6 +1129,10 @@ bool BlockMap::PosBBXOccupied(const Eigen::Vector3d &pos, const Eigen::Vector3d 
     VoxelState state;
     lowbd = pos - bbx / 2;
     upbd = pos + bbx / 2 + Eigen::Vector3d::Ones() * (resolution_ - 1e-3);
+    if(is_ground_robot_){
+        double ground_thresh = std::max(robot_height_ - ground_filter_margin_, map_lowbd_(2));
+        lowbd(2) = max(lowbd(2), ground_thresh);
+    }
     for(v_it(0) = lowbd(0); v_it(0) < upbd(0); v_it(0) += resolution_){
         for(v_it(1) = lowbd(1); v_it(1) < upbd(1); v_it(1) += resolution_){
             for(v_it(2) = lowbd(2); v_it(2) < upbd(2); v_it(2) += resolution_){
@@ -1068,6 +1149,10 @@ bool BlockMap::PosBBXFree(const Eigen::Vector3d &pos, const Eigen::Vector3d &bbx
     VoxelState state;
     lowbd = pos - bbx / 2;
     upbd = pos + bbx / 2 + Eigen::Vector3d::Ones() * (resolution_ - 1e-3);
+    if(is_ground_robot_){
+        double ground_thresh = std::max(robot_height_ - ground_filter_margin_, map_lowbd_(2));
+        lowbd(2) = max(lowbd(2), ground_thresh);
+    }
     for(v_it(0) = lowbd(0); v_it(0) < upbd(0); v_it(0) += resolution_){
         for(v_it(1) = lowbd(1); v_it(1) < upbd(1); v_it(1) += resolution_){
             for(v_it(2) = lowbd(2); v_it(2) < upbd(2); v_it(2) += resolution_){
