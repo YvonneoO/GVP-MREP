@@ -816,6 +816,10 @@ void BlockMap::InsertImg(const sensor_msgs::ImageConstPtr &depth){
     RayCaster rc;
 
     cam3i = PostoId3(cam2world_.block(0,3,3,1));
+    // Sanity check: camera axes in world frame
+    Eigen::Vector3d cam_z_world = cam2world_.block<3,3>(0,0) * Eigen::Vector3d(0,0,1);
+    ROS_INFO_STREAM_THROTTLE(1.0, "cam +Z world dir: " << cam_z_world.transpose());
+
     newly_register_idx_.clear();
     if(initial_free_pts_pending_){
         newly_register_idx_.insert(newly_register_idx_.end(),

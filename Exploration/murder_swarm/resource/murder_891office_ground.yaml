@@ -3,7 +3,7 @@ is_ground_robot: false
 
 Frontier/sample_max_range: 2.2 # max dist from vp to ft grid center
 Frontier/grid_scale: 2.0 # ft grid cell size
-Frontier/viewpoint_thresh: 1.3 # min dist from vp to ft grid center
+Frontier/viewpoint_thresh: 1.3 # vp gain threshold
 Frontier/observe_thresh: 0.65 # exp thresh, min percent of voxels in a ft grid to consider as observed
 Frontier/resample_duration: 0.8 # time interval to resample vps for each ft grid
 Frontier/sample_hor_dir_num: 10 # num of vps in the horizontal direction
@@ -47,7 +47,7 @@ block_map/minY: -15.5
 block_map/minZ: -0.1
 block_map/maxX: 20.0
 block_map/maxY: 19.0
-block_map/maxZ: 4.0
+block_map/maxZ: 3.9
 block_map/blockX: 15
 block_map/blockY: 15
 block_map/blockZ: 15
@@ -85,7 +85,7 @@ Exp/minY: -15.5
 Exp/minZ: -0.1
 Exp/maxX: 20.0
 Exp/maxY: 19.0
-Exp/maxZ: 4.0
+Exp/maxZ: 3.9
 Exp/traj_length: 10.0 # max path length to be considered for corridor generation
 Exp/local_path_search: 1000
 Exp/global_path_search: 3000

@@ -81,16 +81,28 @@ void PublishSetpoint(const Eigen::Vector3d &p, const Eigen::Vector3d &v,
 void Takeoff(const std_msgs::EmptyPtr &msg){
     Eigen::Vector3d v = Eigen::Vector3d::Zero();
     Eigen::Vector3d a = Eigen::Vector3d::Zero();
+
+    // takeoff to target height without rotation (yaw = 0)
     for(double l = 0.0; l < 1.0; l += 0.11){
         Eigen::Vector3d pos = takeoff_pos_;
         pos.z() = takeoff_pos_(2) * l;
-        double yaw = M_PI * l;
+        double yaw = 0.0;  // Keep yaw constant during ascent
         PublishSetpoint(pos, v, a, yaw, 0.0, 0.0);
         ros::Duration(2.0/10).sleep();
     }
     ros::Duration(0.5).sleep();
+
+    // rotate at target height
     Eigen::Vector3d pos = takeoff_pos_;
     pos.z() = takeoff_pos_(2);
+    for(double l = 0.0; l < 1.0; l += 0.11){
+        double yaw = 2.0 * M_PI * l;  // Rotate 360 degrees (2*PI radians)
+        PublishSetpoint(pos, v, a, yaw, 0.0, 0.0);
+        ros::Duration(2.0/10).sleep();
+    }
+    ros::Duration(0.5).sleep();
+    
+    // forward movement
     for(double l = 0.0; l < 1.0; l += 0.11){    
         pos.x() += 0.11 * 1.5;
         PublishSetpoint(pos, v, a, 0.0, 0.0, 0.0);

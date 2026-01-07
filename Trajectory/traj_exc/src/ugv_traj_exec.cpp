@@ -541,7 +541,8 @@ void LoadParameters(ros::NodeHandle& nh_private) {
     ROS_INFO("cmd_topic: %s", cmd_topic_.c_str());
     nh_private.param("/waypoint_sample_dt", sample_dt_, 0.3);
     ROS_INFO("sample_dt: %f", sample_dt_);
-    nh_private.param("/desired_velocity", desired_vel_, 2.2);
+    nh_private.param("/desired_velocity", desired_vel_, 2.5);
+    ROS_INFO("desired_vel: %f", desired_vel_);
     nh_private.param("/desired_angular_velocity", desired_ang_vel_, 1.2);
     ROS_INFO("desired_ang_vel: %f", desired_ang_vel_);
     nh_private.param("/reach_goal_distance", reach_goal_distance_, 0.3);
