@@ -130,3 +130,13 @@ We use [MINCO](https://github.com/ZJU-FAST-Lab/GCOPTER.git) for trajectory plann
 
 ## 5. Doing
 The code annotation is comming soon.
+
+## 6. Docker
+```
+cd GVP-MREP/Docker
+```
+
+build by 
+``` docker build -f Dockerfile -t gvpmrep:latest . ```
+run by 
+``` docker run -it -v ${GVP-MREP_ws_on_local}:/root/GVP-MREP:rw gvpmrep:latest ```

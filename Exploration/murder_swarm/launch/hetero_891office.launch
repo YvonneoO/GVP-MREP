@@ -29,8 +29,8 @@
     <arg name="drone_num" value="$(arg drone_num)"/>
     <arg name="world" value="$(arg world)"/>
     <arg name="id" value="1"/>
-    <arg name="init_x"   value="2"/>
-    <arg name="init_y"   value="2"/>
+    <arg name="init_x"   value="0"/>
+    <arg name="init_y"   value="-1"/>
     <arg name="init_z"   value="0.14"/> 
   </include>
 
