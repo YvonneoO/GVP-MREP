@@ -33,7 +33,10 @@ target_link_libraries(swarm_trigger
 
 
 cs_add_executable(ground_node src/ground_node.cpp)
-
+catkin_install_python(PROGRAMS
+  utils/fix_frame_ids.py
+  DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+)
 target_link_libraries(ground_node
         ${catkin_LIBRARIES} ground)
 ##########

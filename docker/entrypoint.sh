@@ -15,7 +15,8 @@ cp -r /root/catkin_ws/src/catkin_simple /root/GVP-MREP/src && echo "✓ catkin_s
 # Check if mounted workspace exists
 if [ -d /root/GVP-MREP/src ]; then
   echo "Mounted workspace found at /root/GVP-MREP"
-  cd /root/GVP-MREP
+  cd /root/GVP-MREP/Exploration/murder_swarm/utils/ &&
+  chmod +x fix_frame_ids.py &&
   catkin_make && source devel/setup.bash
 else
   echo "/root/GVP-MREP/src does not exist. Please mount your workspace correctly."

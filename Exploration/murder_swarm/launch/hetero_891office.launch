@@ -24,6 +24,10 @@
   <!-- <node name="rvizvisualisation" pkg="rviz" type="rviz" output="screen" args="-d $(find murder_swarm)/rviz/murder_swarm_local.rviz"/> -->
   <!-- <node name="rvizvisualisation" pkg="rviz" type="rviz" output="screen" args="-d $(find murder_swarm)/rviz/ground_demo.rviz"/> -->
 
+
+  <node pkg="murder_swarm" type="fix_frame_ids.py" name="fix_frame_ids_node" output="screen" />
+
+
 <!-- UAV -->
  <include file="$(find murder_swarm)/launch/uav_single.launch" if="$(eval arg('drone_num') >= 1)">
     <arg name="drone_num" value="$(arg drone_num)"/>
