@@ -1,4 +1,6 @@
 #include <multiDTG/multiDTG.h>
+#include <iomanip>
+#include <unordered_set>
 using namespace DTG;
 void MultiDTG::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     double topo_range;
@@ -53,6 +55,7 @@ void MultiDTG::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
 
     topo_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns + "/MR_DTG/Graph", 10);
     debug_pub_ = nh.advertise<visualization_msgs::Marker>(ns + "/MR_DTG/Debug", 10);
+    dtgSnapshotSrv_ = nh.advertiseService(ns + "/dtg_snapshot", &MultiDTG::dtgSnapshotSrvCB, this);
     show_timer_ = nh.createTimer(ros::Duration(0.2), &MultiDTG::ShowAll, this);
     if(drone_num_ > 1){
         use_swarm_ = true;
@@ -1068,4 +1071,68 @@ void MultiDTG::Debug(list<Eigen::Vector3d> &fl){
     if(mk.points.size() != 0)
         debug_pub_.publish(mk);
     // fl.clear();
+}
+
+bool MultiDTG::dtgSnapshotSrvCB(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res) {
+    res.success = true;
+    const ros::Time stamp = ros::Time::now();
+    res.message = this->serializeDTGSnapshotCSV(stamp);
+    return true;
+}
+
+std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
+    std::ostringstream out;
+    out << "# DTG_SNAPSHOT\n";
+    out << "stamp_ns," << static_cast<uint64_t>(stamp.toNSec()) << "\n";
+    out << "robot_id," << this->uav_id_ << "\n";
+    
+    // Nodes
+    out << "# H_NODES\n";
+    out << "# id,x,y,z,state\n";
+    for (const auto& h : H_list_) {
+        out << h->id_ << "," << std::fixed << std::setprecision(6) 
+            << h->pos_(0) << "," << h->pos_(1) << "," << h->pos_(2) << ","
+            << static_cast<int>(h->state_) << "\n";
+    }
+
+    out << "# F_NODES\n";
+    out << "# id,x,y,z,vp_id\n";
+    for (const auto& f : F_depot_) {
+        if (!f || f->cf_->f_state_ == 0) continue; // Skip inactive/uninitialized ones if they are 0
+        out << f->id_ << "," << std::fixed << std::setprecision(6)
+            << f->center_(0) << "," << f->center_(1) << "," << f->center_(2) << ","
+            << f->vp_id_ << "\n";
+    }
+
+    // Edges
+    out << "# HH_EDGES\n";
+    out << "# head,tail,length,path_points_count,path_points(x;y;z;...)\n";
+    std::unordered_set<hhe_ptr> exported_hhe;
+    for (const auto& h : H_list_) {
+        for (const auto& e : h->hh_edges_) {
+            if (exported_hhe.count(e)) continue;
+            exported_hhe.insert(e);
+            out << e->head_ << "," << e->tail_ << "," << e->length_ << "," << e->path_.size() << ",";
+            for (auto it = e->path_.begin(); it != e->path_.end(); ++it) {
+                if (it != e->path_.begin()) out << ";";
+                out << it->x() << ";" << it->y() << ";" << it->z();
+            }
+            out << "\n";
+        }
+    }
+
+    out << "# HF_EDGES\n";
+    out << "# head,tail,length,path_points_count,path_points(x;y;z;...)\n";
+    for (const auto& h : H_list_) {
+        for (const auto& e : h->hf_edges_) {
+            out << e->head_ << "," << e->tail_ << "," << e->length_ << "," << e->path_.size() << ",";
+            for (auto it = e->path_.begin(); it != e->path_.end(); ++it) {
+                if (it != e->path_.begin()) out << ";";
+                out << it->x() << ";" << it->y() << ";" << it->z();
+            }
+            out << "\n";
+        }
+    }
+
+    return out.str();
 }

@@ -12,6 +12,12 @@ include_directories(
 )
 
 cs_add_library(${PROJECT_NAME} src/multiDTG.cpp src/multiDTG_path_search.cpp)
+
+cs_add_executable(dtg_recorder_node src/dtg_recorder_node.cpp)
+target_link_libraries(dtg_recorder_node ${catkin_LIBRARIES})
+
+cs_add_executable(dtg_reader_node src/dtg_reader_node.cpp)
+target_link_libraries(dtg_reader_node ${catkin_LIBRARIES})
 ##########
 # EXPORT #
 ##########

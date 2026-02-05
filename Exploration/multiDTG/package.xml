@@ -26,6 +26,7 @@
   <depend>lowres_map</depend>
   <depend>frontier_grid</depend>
   <depend>swarm_data</depend>
+  <depend>std_srvs</depend>
   <!-- <depend>explore_con</depend> -->
   <!-- <depend>kdtree</depend> -->
   

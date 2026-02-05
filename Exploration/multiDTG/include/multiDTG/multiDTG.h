@@ -2,6 +2,7 @@
 #define MULTI_DTG_H_
 
 #include <ros/ros.h>
+#include <std_srvs/Trigger.h>
 #include <thread>
 #include <Eigen/Eigen>
 #include <vector>
@@ -312,6 +313,7 @@ private:
     prio_D open_D_;
 
     ros::Timer show_timer_;
+    ros::ServiceServer dtgSnapshotSrv_;
 
     FrontierGrid *FG_;
     lowres::LowResMap *LRM_;
@@ -322,7 +324,9 @@ private:
     ros::Timer swarm_timer_;
     bool use_swarm_;
     int drone_num_;
-    
+
+    bool dtgSnapshotSrvCB(std_srvs::Trigger::Request& req, std_srvs::Trigger::Response& res);
+    std::string serializeDTGSnapshotCSV(const ros::Time& stamp);
 };
 
 inline void MultiDTG::EraseFnode(const Eigen::Vector3d &center, const uint32_t &id){
