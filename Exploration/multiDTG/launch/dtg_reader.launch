@@ -1,5 +1,5 @@
 <launch>
-    <arg name="dtg_log_file" default=""/>
+    <arg name="dtg_log_file" default="/root/GVP-MREP/logs/dtg_dumps/dtg_snapshot_rid0_6210399861187.csv"/>
 
     <node pkg="multiDTG" type="dtg_reader_node" name="dtg_reader" output="screen">
         <param name="dtg_log_file" value="$(arg dtg_log_file)"/>

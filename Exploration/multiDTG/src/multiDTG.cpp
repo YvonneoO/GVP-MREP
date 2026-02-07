@@ -1099,20 +1099,28 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     out << "# id,x,y,z,vp_id\n";
     for (const auto& f : F_depot_) {
         if (!f || f->cf_->f_state_ == 0) continue; // Skip inactive/uninitialized ones if they are 0
+        
+        Eigen::Vector3d vp_pos = f->center_; // Default to center if viewpoint not found
+        if (f->vp_id_ != -1) {
+            FG_->GetVpPos(f->id_, f->vp_id_, vp_pos);
+        }
+
         out << f->id_ << "," << std::fixed << std::setprecision(6)
-            << f->center_(0) << "," << f->center_(1) << "," << f->center_(2) << ","
+            << vp_pos(0) << "," << vp_pos(1) << "," << vp_pos(2) << ","
             << f->vp_id_ << "\n";
     }
 
     // Edges
     out << "# HH_EDGES\n";
-    out << "# head,tail,length,path_points_count,path_points(x;y;z;...)\n";
+    out << "# head,tail,length_s,length,flag,path_points_count,path_points(x;y;z;...)\n";
     std::unordered_set<hhe_ptr> exported_hhe;
     for (const auto& h : H_list_) {
         for (const auto& e : h->hh_edges_) {
             if (exported_hhe.count(e)) continue;
             exported_hhe.insert(e);
-            out << e->head_ << "," << e->tail_ << "," << e->length_ << "," << e->path_.size() << ",";
+            out << e->head_ << "," << e->tail_ << "," 
+                << std::fixed << std::setprecision(6) << e->length_s_ << "," << e->length_ << ","
+                << static_cast<int>(e->e_flag_) << "," << e->path_.size() << ",";
             for (auto it = e->path_.begin(); it != e->path_.end(); ++it) {
                 if (it != e->path_.begin()) out << ";";
                 out << it->x() << ";" << it->y() << ";" << it->z();
@@ -1122,10 +1130,12 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     }
 
     out << "# HF_EDGES\n";
-    out << "# head,tail,length,path_points_count,path_points(x;y;z;...)\n";
+    out << "# head,tail,length,flag,path_points_count,path_points(x;y;z;...)\n";
     for (const auto& h : H_list_) {
         for (const auto& e : h->hf_edges_) {
-            out << e->head_ << "," << e->tail_ << "," << e->length_ << "," << e->path_.size() << ",";
+            out << e->head_ << "," << e->tail_ << "," 
+                << std::fixed << std::setprecision(6) << e->length_ << ","
+                << static_cast<int>(e->e_flag_) << "," << e->path_.size() << ",";
             for (auto it = e->path_.begin(); it != e->path_.end(); ++it) {
                 if (it != e->path_.begin()) out << ";";
                 out << it->x() << ";" << it->y() << ";" << it->z();

@@ -70,9 +70,13 @@ private:
     // If serviceName is absolute, use it directly.
     if (!serviceName_.empty() && serviceName_.front() == '/') return serviceName_;
     
-    // Example: /uav0/murder_node/dtg_snapshot
-    std::string srv = robotNamespacePrefix_ + std::to_string(robotId) + "/" + serviceName_;
-    return srv;
+    // Special case for id=0 which is the ground_node in this repo
+    if (robotId == 0) {
+        return "/ground_node/" + serviceName_;
+    }
+
+    // Default project convention for UAVs: /murder_X/dtg_snapshot
+    return "/murder_" + std::to_string(robotId) + "/" + serviceName_;
   }
 
   void timerCB(const ros::TimerEvent&) {

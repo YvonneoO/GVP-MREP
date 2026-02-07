@@ -1,13 +1,12 @@
 <launch>
     <arg name="robot_id" default="0"/>
     <arg name="interval" default="10.0"/>
-    <arg name="output_directory" default="/home/cerlab/ros1/logs/dtg_dumps"/>
+    <arg name="output_directory" default="/root/GVP-MREP/logs/dtg_dumps"/>
 
     <node pkg="multiDTG" type="dtg_recorder_node" name="dtg_recorder_$(arg robot_id)" output="screen">
         <param name="robot_id" value="$(arg robot_id)"/>
         <param name="interval" value="$(arg interval)"/>
         <param name="output_directory" value="$(arg output_directory)"/>
-        <param name="robot_namespace_prefix" value="/uav"/>
-        <param name="service_name" value="murder_node/dtg_snapshot"/>
+        <param name="service_name" value="dtg_snapshot"/>
     </node>
 </launch>
