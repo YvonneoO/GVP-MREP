@@ -38,6 +38,12 @@ struct ReaderNode {
 
 class DTGReader {
 public:
+    struct FullPath {
+        std::vector<uint32_t> nodePath;
+        std::vector<Eigen::Vector3d> points;
+        double length;
+    };
+
     DTGReader(ros::NodeHandle& nh) : nh_(nh) {
         nh.param<std::string>("dtg_log_file", dtg_log_file_, "");
         
@@ -58,6 +64,17 @@ public:
     }
 
 private:
+    struct EdgeRecord {
+        uint32_t head;
+        uint32_t tail;
+        double length_s;
+        double length;
+        int flag;
+        std::vector<Eigen::Vector3d> path;
+    };
+    std::vector<EdgeRecord> hf_edge_records_;
+    std::vector<EdgeRecord> hh_edge_records_;
+
     void loadCSV(const std::string& filename) {
         std::ifstream ifs(filename);
         if (!ifs.is_open()) {
@@ -158,6 +175,7 @@ private:
                         std::reverse(rev_path.begin(), rev_path.end());
                         nodes_[tail].edges.push_back({head, length_s, length, flag, false, rev_path});
                     }
+                    hh_edge_records_.push_back({head, tail, length_s, length, flag, path});
                 } else if (section == "HF_EDGES") {
                     if (row.size() < 5) continue;
                     uint32_t head = safe_stoul(row[0]);
@@ -184,6 +202,7 @@ private:
                         // For HF edges, length_s is not applicable, use length for both
                         nodes_[head].edges.push_back({tail, length, length, flag, true, path});
                     }
+                    hf_edge_records_.push_back({head, tail, length, length, flag, path});
                 }
             } catch (const std::exception& e) {
                 ROS_WARN("[DTGReader] Skipping malformed line in section %s: %s (Error: %s)", section.c_str(), line.c_str(), e.what());
@@ -191,6 +210,91 @@ private:
         }
         ifs.close();
         ROS_INFO("[DTGReader] Loaded CSV. H-Nodes: %zu, F-Nodes: %zu", h_node_ids_.size(), f_node_ids_.size());
+
+        precalculateAllPaths();
+    }
+
+    void precalculateAllPaths() {
+        if (h_node_ids_.empty() || f_node_ids_.empty()) {
+            ROS_WARN("[DTGReader] No nodes to calculate paths between.");
+            return;
+        }
+
+        ROS_INFO("[DTGReader] Pre-calculating all paths from all H-nodes to all F-nodes...");
+        all_reconstructed_paths_.clear();
+
+        for (uint32_t startId : h_node_ids_) {
+            // Reset nodes for Dijkstra
+            for (auto& pair : nodes_) {
+                pair.second.g = std::numeric_limits<double>::infinity();
+                pair.second.parent_id = 0;
+                pair.second.visited = false;
+            }
+
+            auto cmp = [](const std::pair<double, uint32_t>& a, const std::pair<double, uint32_t>& b) {
+                return a.first > b.first;
+            };
+            std::priority_queue<std::pair<double, uint32_t>, std::vector<std::pair<double, uint32_t>>, decltype(cmp)> pq(cmp);
+
+            nodes_[startId].g = 0;
+            pq.push(std::make_pair(0.0, startId));
+
+            while (!pq.empty()) {
+                uint32_t u = pq.top().second;
+                pq.pop();
+
+                if (nodes_[u].visited) continue;
+                nodes_[u].visited = true;
+
+                for (const auto& edge : nodes_[u].edges) {
+                    if (nodes_.count(edge.neighbor_id)) {
+                        double edge_len = edge.length_s;
+                        if (edge.flag & 16) edge_len = edge.length;
+
+                        double new_g = nodes_[u].g + edge_len;
+                        if (new_g < nodes_[edge.neighbor_id].g) {
+                            nodes_[edge.neighbor_id].g = new_g;
+                            nodes_[edge.neighbor_id].parent_id = u;
+                            pq.push(std::make_pair(new_g, edge.neighbor_id));
+                        }
+                    }
+                }
+            }
+
+            // Reconstruct paths for all F-nodes reachable from this H-node
+            for (uint32_t goalId : f_node_ids_) {
+                if (nodes_[goalId].parent_id == 0 && goalId != startId) continue;
+
+                FullPath fp;
+                fp.length = nodes_[goalId].g;
+                
+                uint32_t curr = goalId;
+                while (curr != 0) {
+                    fp.nodePath.push_back(curr);
+                    uint32_t prev = nodes_[curr].parent_id;
+                    if (prev != 0) {
+                        // Find edge from prev to curr to get path points
+                        bool found_edge = false;
+                        for (const auto& edge : nodes_[prev].edges) {
+                            if (edge.neighbor_id == curr) {
+                                for (auto it = edge.path.rbegin(); it != edge.path.rend(); ++it) {
+                                    fp.points.insert(fp.points.begin(), *it);
+                                }
+                                found_edge = true;
+                                break;
+                            }
+                        }
+                    }
+                    curr = prev;
+                }
+                std::reverse(fp.nodePath.begin(), fp.nodePath.end());
+                all_reconstructed_paths_[startId][goalId] = fp;
+            }
+        }
+        
+        size_t total_paths = 0;
+        for (const auto& pair : all_reconstructed_paths_) total_paths += pair.second.size();
+        ROS_INFO("[DTGReader] Pre-calculated %zu paths.", total_paths);
     }
 
     void navGoalCB(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -200,8 +304,15 @@ private:
         points_.push_back(clicked_p);
 
         if (points_.size() == 1) {
-            ROS_INFO("[DTGReader] Start point set: (%.2f, %.2f, %.2f). Click another point for goal.", 
-                     clicked_p.x(), clicked_p.y(), clicked_p.z());
+            uint32_t startNodeId = findNearestNode(clicked_p, false);
+            if (startNodeId != 0) {
+                const auto& sn = nodes_[startNodeId];
+                ROS_INFO("[DTGReader] Start point set: (%.2f, %.2f, %.2f). Nearest H-node: %u at (%.2f, %.2f, %.2f). Click another point for goal.", 
+                         clicked_p.x(), clicked_p.y(), clicked_p.z(), startNodeId, sn.pos.x(), sn.pos.y(), sn.pos.z());
+            } else {
+                ROS_INFO("[DTGReader] Start point set: (%.2f, %.2f, %.2f). No H-node found! Click another point for goal.", 
+                         clicked_p.x(), clicked_p.y(), clicked_p.z());
+            }
         } else if (points_.size() == 2) {
             ROS_INFO("[DTGReader] Goal point set: (%.2f, %.2f, %.2f).", 
                      clicked_p.x(), clicked_p.y(), clicked_p.z());
@@ -226,72 +337,16 @@ private:
         ROS_INFO("  - Goal:  ID %u, Pos (%.2f, %.2f, %.2f), Dist to Clicked: %.2f", 
                  goalNodeId, gn.pos.x(), gn.pos.y(), gn.pos.z(), (gn.pos - goal).norm());
         
-        ROS_INFO("[DTGReader] Finding topological path...");
-        for (auto& pair : nodes_) {
-            pair.second.g = std::numeric_limits<double>::infinity();
-            pair.second.parent_id = 0;
-            pair.second.visited = false;
-        }
-
-        auto cmp = [](const std::pair<double, uint32_t>& a, const std::pair<double, uint32_t>& b) {
-            return a.first > b.first;
-        };
-        std::priority_queue<std::pair<double, uint32_t>, std::vector<std::pair<double, uint32_t>>, decltype(cmp)> pq(cmp);
-
-        nodes_[startNodeId].g = 0;
-        pq.push({0.0, startNodeId});
-
-        bool found = false;
-        while (!pq.empty()) {
-            uint32_t u = pq.top().second;
-            pq.pop();
-
-            if (nodes_[u].visited) continue;
-            nodes_[u].visited = true;
-
-            if (u == goalNodeId) {
-                found = true;
-                break;
-            }
-
-            for (const auto& edge : nodes_[u].edges) {
-                if (nodes_.count(edge.neighbor_id)) {
-                    // Replicate MultiDTG logic for using dangerous (length) or safe (length_s) length
-                    double edge_len = edge.length_s;
-                    if (edge.flag & 16) edge_len = edge.length;
-
-                    double new_g = nodes_[u].g + edge_len;
-                    if (new_g < nodes_[edge.neighbor_id].g) {
-                        nodes_[edge.neighbor_id].g = new_g;
-                        nodes_[edge.neighbor_id].parent_id = u;
-                        pq.push({new_g, edge.neighbor_id});
-                    }
-                }
-            }
-        }
-
-        if (found) {
-            std::vector<Eigen::Vector3d> full_path;
-            uint32_t curr = goalNodeId;
-            while (curr != 0) {
-                uint32_t prev = nodes_[curr].parent_id;
-                if (prev != 0) {
-                    // Find edge from prev to curr
-                    for (const auto& edge : nodes_[prev].edges) {
-                        if (edge.neighbor_id == curr) {
-                            for (auto it = edge.path.rbegin(); it != edge.path.rend(); ++it) {
-                                full_path.insert(full_path.begin(), *it);
-                            }
-                            break;
-                        }
-                    }
-                }
-                curr = prev;
-            }
-            publishPathMarkers(full_path);
-            ROS_INFO("[DTGReader] Path found! Points: %zu", full_path.size());
+        if (all_reconstructed_paths_.count(startNodeId) && 
+            all_reconstructed_paths_[startNodeId].count(goalNodeId)) {
+            
+            const auto& fp = all_reconstructed_paths_[startNodeId][goalNodeId];
+            publishPathMarkers(fp.points);
+            ROS_INFO("[DTGReader] Path retrieved from cache! Points: %zu, Length: %.2f", 
+                     fp.points.size(), fp.length);
         } else {
-            ROS_WARN("[DTGReader] No path found.");
+            ROS_WARN("[DTGReader] No pre-calculated path found between Node %u and Node %u", 
+                     startNodeId, goalNodeId);
         }
     }
 
@@ -385,25 +440,25 @@ private:
         // HF Edges: Yellow
         hf_edges.color.r = 1.0; hf_edges.color.g = 1.0; hf_edges.color.b = 0.0; hf_edges.color.a = 0.5;
 
-        for (auto const& pair : nodes_) {
-            for (auto const& edge : pair.second.edges) {
-                if (nodes_.count(edge.neighbor_id)) {
-                    geometry_msgs::Point p1, p2;
-                    p1.x = pair.second.pos.x(); p1.y = pair.second.pos.y(); p1.z = pair.second.pos.z();
-                    p2.x = nodes_[edge.neighbor_id].pos.x(); p2.y = nodes_[edge.neighbor_id].pos.y(); p2.z = nodes_[edge.neighbor_id].pos.z();
-                    
-                    if (edge.is_hf) {
-                        hf_edges.points.push_back(p1);
-                        hf_edges.points.push_back(p2);
-                    } else {
-                        // Only add HH edges once (from head to tail where head < tail) to avoid redundancy
-                        if (pair.second.id < edge.neighbor_id) {
-                            hh_edges.points.push_back(p1);
-                            hh_edges.points.push_back(p2);
-                        }
-                    }
-                }
+        for (const auto& rec : hh_edge_records_) {
+            if (nodes_.count(rec.head) && nodes_.count(rec.tail)) {
+                geometry_msgs::Point p1, p2;
+                p1.x = nodes_[rec.head].pos.x(); p1.y = nodes_[rec.head].pos.y(); p1.z = nodes_[rec.head].pos.z();
+                p2.x = nodes_[rec.tail].pos.x(); p2.y = nodes_[rec.tail].pos.y(); p2.z = nodes_[rec.tail].pos.z();
+                hh_edges.points.push_back(p1);
+                hh_edges.points.push_back(p2);
             }
+        }
+
+        for (const auto& rec : hf_edge_records_) {
+            if (nodes_.count(rec.head) && nodes_.count(rec.tail)) {
+                geometry_msgs::Point p1, p2;
+                p1.x = nodes_[rec.head].pos.x(); p1.y = nodes_[rec.head].pos.y(); p1.z = nodes_[rec.head].pos.z();
+                p2.x = nodes_[rec.tail].pos.x(); p2.y = nodes_[rec.tail].pos.y(); p2.z = nodes_[rec.tail].pos.z();
+                hf_edges.points.push_back(p1);
+                hf_edges.points.push_back(p2);
+            }
+            // ROS_INFO("[DTGReader] HF Edge: Head %u, Tail %u, Length: %.2f", rec.head, rec.tail, rec.length);
         }
         ma.markers.push_back(hh_edges);
         ma.markers.push_back(hf_edges);
@@ -422,6 +477,7 @@ private:
     std::vector<uint32_t> h_node_ids_;
     std::vector<uint32_t> f_node_ids_;
     std::vector<Eigen::Vector3d> points_;
+    std::unordered_map<uint32_t, std::unordered_map<uint32_t, FullPath>> all_reconstructed_paths_; // hNodeId -> (fNodeId -> path)
 };
 
 } // namespace DTG
