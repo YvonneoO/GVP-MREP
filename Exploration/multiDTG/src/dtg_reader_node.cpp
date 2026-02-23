@@ -46,12 +46,19 @@ public:
 
     DTGReader(ros::NodeHandle& nh) : nh_(nh) {
         nh.param<std::string>("dtg_log_file", dtg_log_file_, "");
+        nh.param<std::string>("results_dir", results_dir_, "");
         
         if (dtg_log_file_.empty()) {
             ROS_ERROR("[DTGReader] dtg_log_file parameter is empty!");
         } else {
             ROS_INFO("[DTGReader] Loading CSV file: %s", dtg_log_file_.c_str());
             loadCSV(dtg_log_file_);
+        }
+
+        if (results_dir_.empty()) {
+            ROS_ERROR("[DTGReader] results_dir parameter is empty!");
+        } else {
+            ROS_INFO("[DTGReader] results directory: %s", results_dir_.c_str());
         }
 
         nav_goal_sub_ = nh_.subscribe("/move_base_simple/goal", 10, &DTGReader::navGoalCB, this);
@@ -261,33 +268,35 @@ private:
                 }
             }
 
-            // Reconstruct paths for all F-nodes reachable from this H-node
+            // Reconstruct paths for all F-nodes from this H-node
             for (uint32_t goalId : f_node_ids_) {
-                if (nodes_[goalId].parent_id == 0 && goalId != startId) continue;
-
                 FullPath fp;
-                fp.length = nodes_[goalId].g;
                 
-                uint32_t curr = goalId;
-                while (curr != 0) {
-                    fp.nodePath.push_back(curr);
-                    uint32_t prev = nodes_[curr].parent_id;
-                    if (prev != 0) {
-                        // Find edge from prev to curr to get path points
-                        bool found_edge = false;
-                        for (const auto& edge : nodes_[prev].edges) {
-                            if (edge.neighbor_id == curr) {
-                                for (auto it = edge.path.rbegin(); it != edge.path.rend(); ++it) {
-                                    fp.points.insert(fp.points.begin(), *it);
+                if (nodes_[goalId].visited || goalId == startId) {
+                    fp.length = nodes_[goalId].g;
+                    uint32_t curr = goalId;
+                    while (curr != 0) {
+                        fp.nodePath.push_back(curr);
+                        uint32_t prev = nodes_[curr].parent_id;
+                        if (prev != 0) {
+                            // Find edge from prev to curr to get path points
+                            for (const auto& edge : nodes_[prev].edges) {
+                                if (edge.neighbor_id == curr) {
+                                    for (auto it = edge.path.rbegin(); it != edge.path.rend(); ++it) {
+                                        fp.points.insert(fp.points.begin(), *it);
+                                    }
+                                    break;
                                 }
-                                found_edge = true;
-                                break;
                             }
                         }
+                        curr = prev;
                     }
-                    curr = prev;
+                    std::reverse(fp.nodePath.begin(), fp.nodePath.end());
+                } else {
+                    // Path not found
+                    fp.length = std::numeric_limits<double>::infinity();
+                    // fp.nodePath and fp.points remain empty
                 }
-                std::reverse(fp.nodePath.begin(), fp.nodePath.end());
                 all_reconstructed_paths_[startId][goalId] = fp;
             }
         }
@@ -295,6 +304,64 @@ private:
         size_t total_paths = 0;
         for (const auto& pair : all_reconstructed_paths_) total_paths += pair.second.size();
         ROS_INFO("[DTGReader] Pre-calculated %zu paths.", total_paths);
+
+        // Record statistics and paths to file if requested
+        if (!results_dir_.empty()) {
+            // Extract robot ID and series number from input dtg_log_file_
+            // Input format expected: .../dtg_snapshot_ridX_TIMESTAMP.csv
+            size_t last_slash = dtg_log_file_.find_last_of('/');
+            std::string input_filename = (last_slash == std::string::npos) ? dtg_log_file_ : dtg_log_file_.substr(last_slash + 1);
+            
+            std::string rid_series = "";
+            size_t first_underscore = input_filename.find('_');
+            if (first_underscore != std::string::npos) {
+                size_t second_underscore = input_filename.find('_', first_underscore + 1);
+                if (second_underscore != std::string::npos) {
+                    // This gets "ridX_TIMESTAMP.csv" or similar
+                    rid_series = input_filename.substr(second_underscore + 1);
+                    // Remove .csv extension if present
+                    if (rid_series.size() > 4 && rid_series.substr(rid_series.size() - 4) == ".csv") {
+                        rid_series = rid_series.substr(0, rid_series.size() - 4);
+                    }
+                }
+            }
+
+            if (rid_series.empty()) {
+                rid_series = "unknown";
+            }
+
+            std::string final_output_file = results_dir_;
+            if (final_output_file.back() != '/') final_output_file += "/";
+            final_output_file += "dtg_results_" + rid_series + ".csv";
+
+            std::ofstream ofs(final_output_file);
+            if (ofs.is_open()) {
+                ofs << "start_node,goal_node,start_x,start_y,start_z,goal_x,goal_y,goal_z,length,num_points,path_points\n";
+                for (const auto& h_pair : all_reconstructed_paths_) {
+                    uint32_t hId = h_pair.first;
+                    const auto& sn = nodes_[hId];
+                    for (const auto& f_pair : h_pair.second) {
+                        uint32_t fId = f_pair.first;
+                        const auto& gn = nodes_[fId];
+                        const auto& fp = f_pair.second;
+                        
+                        ofs << hId << "," << fId << ","
+                            << sn.pos.x() << "," << sn.pos.y() << "," << sn.pos.z() << ","
+                            << gn.pos.x() << "," << gn.pos.y() << "," << gn.pos.z() << ","
+                            << fp.length << "," << fp.points.size() << ",";
+                        for (size_t i = 0; i < fp.points.size(); ++i) {
+                            ofs << fp.points[i].x() << ";" << fp.points[i].y() << ";" << fp.points[i].z();
+                            if (i < fp.points.size() - 1) ofs << ";";
+                        }
+                        ofs << "\n";
+                    }
+                }
+                ofs.close();
+                ROS_INFO("[DTGReader] Path statistics and geometric data written to: %s", final_output_file.c_str());
+            } else {
+                ROS_ERROR("[DTGReader] Failed to write statistics to: %s", final_output_file.c_str());
+            }
+        }
     }
 
     void navGoalCB(const geometry_msgs::PoseStamped::ConstPtr& msg) {
@@ -473,6 +540,7 @@ private:
     ros::WallTimer vis_timer_;
 
     std::string dtg_log_file_;
+    std::string results_dir_;
     std::unordered_map<uint32_t, ReaderNode> nodes_;
     std::vector<uint32_t> h_node_ids_;
     std::vector<uint32_t> f_node_ids_;

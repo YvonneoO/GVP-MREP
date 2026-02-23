@@ -1,12 +1,42 @@
 <launch>
-    <arg name="robot_id" default="0"/>
+    <!-- <arg name="robot_id" default="0"/> -->
     <arg name="interval" default="10.0"/>
     <arg name="output_directory" default="/root/GVP-MREP/logs/dtg_dumps"/>
+    <arg name="minX" default="-18.0"/>
+    <arg name="minY" default="-15.5"/>
+    <arg name="minZ" default="-0.1"/>
+    <arg name="maxX" default="20.0"/>
+    <arg name="maxY" default="19.0"/>
+    <arg name="maxZ" default="3.9"/>
+    <arg name="resolution" default="0.1"/>
 
-    <node pkg="multiDTG" type="dtg_recorder_node" name="dtg_recorder_$(arg robot_id)" output="screen">
-        <param name="robot_id" value="$(arg robot_id)"/>
-        <param name="interval" value="$(arg interval)"/>
-        <param name="output_directory" value="$(arg output_directory)"/>
-        <param name="service_name" value="dtg_snapshot"/>
-    </node>
+    <group ns="robot_0">
+        <node pkg="multiDTG" type="dtg_recorder_node" name="dtg_recorder_node_0" output="screen">
+            <param name="robot_id" value="0"/>
+            <param name="output_directory" value="$(arg output_directory)"/>
+            <param name="service_name" value="dtg_snapshot"/>
+            <param name="minX" value="$(arg minX)"/>
+            <param name="minY" value="$(arg minY)"/>
+            <param name="minZ" value="$(arg minZ)"/>
+            <param name="maxX" value="$(arg maxX)"/>
+            <param name="maxY" value="$(arg maxY)"/>
+            <param name="maxZ" value="$(arg maxZ)"/>
+            <param name="resolution" value="$(arg resolution)"/>
+        </node>
+    </group>
+    
+    <group ns="robot_1">
+        <node pkg="multiDTG" type="dtg_recorder_node" name="dtg_recorder_node_1" output="screen">
+            <param name="robot_id" value="1"/>
+            <param name="output_directory" value="$(arg output_directory)"/>
+            <param name="service_name" value="dtg_snapshot"/>
+            <param name="minX" value="$(arg minX)"/>
+            <param name="minY" value="$(arg minY)"/>
+            <param name="minZ" value="$(arg minZ)"/>
+            <param name="maxX" value="$(arg maxX)"/>
+            <param name="maxY" value="$(arg maxY)"/>
+            <param name="maxZ" value="$(arg maxZ)"/>
+            <param name="resolution" value="$(arg resolution)"/>
+        </node>
+    </group>
 </launch>

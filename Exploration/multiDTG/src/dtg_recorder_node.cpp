@@ -8,6 +8,7 @@
 
 #include <ros/ros.h>
 #include <std_srvs/Trigger.h>
+#include <std_msgs/Float64.h>
 
 #include <fstream>
 #include <iomanip>
@@ -17,6 +18,7 @@
 #include <sys/types.h>
 #include <string>
 #include <vector>
+#include <unordered_set>
 
 class DTGRecorderNode {
 public:
@@ -26,26 +28,40 @@ public:
     pnh_.param<int>("robot_id", robotId_, 0);
     pnh_.param<std::string>("output_directory", outputDir_, "/home/cerlab/ros1/logs/dtg_dumps");
     pnh_.param<std::string>("file_prefix", filePrefix_, "dtg_snapshot");
-    pnh_.param<double>("interval", intervalSec_, 10.0);
-
-    if (intervalSec_ <= 0.0) {
-      ROS_WARN("[dtg_recorder_node] interval <= 0, forcing to 10.0s");
-      intervalSec_ = 10.0;
-    }
-
+    
     if (!ensureDirectory(outputDir_)) {
       throw std::runtime_error("Failed to create output directory");
     }
 
     const std::string srvName = serviceForRobot(robotId_);
     client_ = nh_.serviceClient<std_srvs::Trigger>(srvName);
-    timer_ = nh_.createTimer(ros::Duration(intervalSec_), &DTGRecorderNode::timerCB, this);
+    
+    // Subscribe to exploration percentage from external statistics node
+    percentageSub_ = nh_.subscribe("/exploration_percentage", 10, &DTGRecorderNode::percentageCB, this);
 
-    ROS_INFO("[dtg_recorder_node] Recording enabled. robot_id=%d service=%s interval=%.2f dir=%s prefix=%s",
-             robotId_, srvName.c_str(), intervalSec_, outputDir_.c_str(), filePrefix_.c_str());
+    triggerPoints_ = {0.3, 0.5, 0.7, 0.9};
+
+    ROS_INFO("[dtg_recorder_node] Recording enabled. robot_id=%d service=%s", robotId_, srvName.c_str());
   }
 
 private:
+  void percentageCB(const std_msgs::Float64ConstPtr& msg) {
+    double percentage = msg->data;
+    lastPercentage_ = percentage;
+
+    auto it = triggerPoints_.begin();
+    while (it != triggerPoints_.end()) {
+      if (percentage >= *it) {
+        ROS_WARN("[dtg_recorder_node] Exploration reached %.0f%%. Triggering snapshot...", 
+                 (*it) * 100.0);
+        triggerSnapshot();
+        it = triggerPoints_.erase(it);
+      } else {
+        ++it;
+      }
+    }
+  }
+
   static bool ensureDirectory(const std::string& dir) {
     if (dir.empty()) return false;
     std::string path;
@@ -67,19 +83,12 @@ private:
   }
 
   std::string serviceForRobot(int robotId) const {
-    // If serviceName is absolute, use it directly.
     if (!serviceName_.empty() && serviceName_.front() == '/') return serviceName_;
-    
-    // Special case for id=0 which is the ground_node in this repo
-    if (robotId == 0) {
-        return "/ground_node/" + serviceName_;
-    }
-
-    // Default project convention for UAVs: /murder_X/dtg_snapshot
+    if (robotId == 0) return "/ground_node/" + serviceName_;
     return "/murder_" + std::to_string(robotId) + "/" + serviceName_;
   }
 
-  void timerCB(const ros::TimerEvent&) {
+  void triggerSnapshot() {
     std_srvs::Trigger srv;
     if (!client_.call(srv)) {
       ROS_WARN("[dtg_recorder_node] Service call failed");
@@ -103,28 +112,30 @@ private:
     }
     ofs << "# RECORDER\n";
     ofs << "robot_id," << robotId_ << "\n";
+    ofs << "exploration_percentage," << lastPercentage_ << "\n";
     ofs << srv.response.message;
     ofs.close();
 
-    if (!ofs) {
-      ROS_WARN("[dtg_recorder_node] Failed to write '%s'", outPath.c_str());
-      return;
-    }
-
     ROS_INFO("[dtg_recorder_node] Wrote snapshot: %s", outPath.c_str());
+  }
+
+  void timerCB(const ros::TimerEvent&) {
+    // Timer functionality removed as requested
   }
 
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
   ros::ServiceClient client_;
-  ros::Timer timer_;
+  ros::Subscriber percentageSub_;
 
   std::string serviceName_;
   std::string robotNamespacePrefix_;
   int robotId_{0};
   std::string outputDir_;
   std::string filePrefix_;
-  double intervalSec_{10.0};
+  
+  double lastPercentage_{0.0};
+  std::vector<double> triggerPoints_;
 };
 
 int main(int argc, char** argv) {

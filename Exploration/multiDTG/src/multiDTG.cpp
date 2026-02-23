@@ -1,6 +1,8 @@
 #include <multiDTG/multiDTG.h>
 #include <iomanip>
 #include <unordered_set>
+#include <set>
+#include <tuple>
 using namespace DTG;
 void MultiDTG::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
     double topo_range;
@@ -747,7 +749,7 @@ void MultiDTG::Show(){
         p1.x = h->pos_(0);
         p1.y = h->pos_(1);
         p1.z = h->pos_(2);
-        // cout<<"show!!!!!!!!!!!!!!!!!!!"<<h->pos_.transpose()<<endl;
+        cout<<"show!!!!!!!!!!!!!!!!!!!"<<h->pos_.transpose()<<endl;
         // cout<<"neighbours:"<<h->hh_edges_.size()<<endl;
         if(h->h_flags_ & 4)
             mka.markers[0].colors.push_back(CM_->Id2Color(SDM_->self_id_, 1.0));
@@ -1089,7 +1091,16 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     // Nodes
     out << "# H_NODES\n";
     out << "# id,x,y,z,state\n";
+    std::set<std::tuple<double, double, double>> exported_h_positions;
+    std::unordered_set<uint32_t> exported_h_ids;
     for (const auto& h : H_list_) {
+        // Use exact position to check for duplicates
+        auto pos_tuple = std::make_tuple(h->pos_(0), h->pos_(1), h->pos_(2));
+        if (exported_h_positions.count(pos_tuple)) continue;
+        exported_h_positions.insert(pos_tuple);
+
+        exported_h_ids.insert(h->id_);
+        
         out << h->id_ << "," << std::fixed << std::setprecision(6) 
             << h->pos_(0) << "," << h->pos_(1) << "," << h->pos_(2) << ","
             << static_cast<int>(h->state_) << "\n";
@@ -1099,11 +1110,10 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     out << "# id,x,y,z,vp_id\n";
     for (const auto& f : F_depot_) {
         if (!f || f->cf_->f_state_ == 0) continue; // Skip inactive/uninitialized ones if they are 0
+        if (f->vp_id_ == -1) continue; // Skip if no viewpoint found
         
-        Eigen::Vector3d vp_pos = f->center_; // Default to center if viewpoint not found
-        if (f->vp_id_ != -1) {
-            FG_->GetVpPos(f->id_, f->vp_id_, vp_pos);
-        }
+        Eigen::Vector3d vp_pos;
+        FG_->GetVpPos(f->id_, f->vp_id_, vp_pos);
 
         out << f->id_ << "," << std::fixed << std::setprecision(6)
             << vp_pos(0) << "," << vp_pos(1) << "," << vp_pos(2) << ","
@@ -1115,8 +1125,10 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     out << "# head,tail,length_s,length,flag,path_points_count,path_points(x;y;z;...)\n";
     std::unordered_set<hhe_ptr> exported_hhe;
     for (const auto& h : H_list_) {
+        if (!exported_h_ids.count(h->id_)) continue;
         for (const auto& e : h->hh_edges_) {
             if (exported_hhe.count(e)) continue;
+            if (!exported_h_ids.count(e->head_) || !exported_h_ids.count(e->tail_)) continue;
             exported_hhe.insert(e);
             out << e->head_ << "," << e->tail_ << "," 
                 << std::fixed << std::setprecision(6) << e->length_s_ << "," << e->length_ << ","
@@ -1132,7 +1144,16 @@ std::string MultiDTG::serializeDTGSnapshotCSV(const ros::Time& stamp) {
     out << "# HF_EDGES\n";
     out << "# head,tail,length,flag,path_points_count,path_points(x;y;z;...)\n";
     for (const auto& h : H_list_) {
+        if (!exported_h_ids.count(h->id_)) continue;
         for (const auto& e : h->hf_edges_) {
+            // Check if the target F-node exists and has a valid viewpoint
+            if (e->tail_ < F_depot_.size()) {
+                const auto& f = F_depot_[e->tail_];
+                if (!f || f->cf_->f_state_ == 0 || f->vp_id_ == -1) continue;
+            } else {
+                continue;
+            }
+
             out << e->head_ << "," << e->tail_ << "," 
                 << std::fixed << std::setprecision(6) << e->length_ << ","
                 << static_cast<int>(e->e_flag_) << "," << e->path_.size() << ",";
