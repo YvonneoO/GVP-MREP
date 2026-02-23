@@ -441,18 +441,12 @@ void LowResMap::ClearInfeasible(vector<Eigen::Vector3d> &occ_list){
     double time = ros::Time::now().toSec();
     h_id_clear_.clear();
 
-    const double ground_thresh = GroundFilterThresh();
     const double robot_z_max = Robot_pos_.z() + Robot_size_.z();
     const double robot_radius_sq = Robot_size_.x() * Robot_size_.x() * 0.25;
 
     for(vector<Eigen::Vector3d>::iterator ocit = occ_list.begin(); ocit != occ_list.end(); ocit++){
         if (is_ground_robot_) {
-            // Ignore points that are on the ground
-            if (ocit->z() <= ground_thresh) {
-                continue;
-            }
-
-            // Ignore points that are likely part of the robot's own body (simple cylindrical self-filter)
+            // Ignore points that are likely part of the robot's own body (simple cylindrical self-filter).
             double dx = ocit->x() - Robot_pos_.x();
             double dy = ocit->y() - Robot_pos_.y();
             if ((dx * dx + dy * dy < robot_radius_sq) && (ocit->z() < robot_z_max)) {
@@ -479,18 +473,12 @@ void LowResMap::ClearInfeasibleTopo(vector<Eigen::Vector3d> &occ_list){
     double time = ros::Time::now().toSec();
     h_id_clear_.clear();
 
-    const double ground_thresh = GroundFilterThresh();
     const double robot_z_max = Robot_pos_.z() + Robot_size_.z();
     const double robot_radius_sq = Robot_size_.x() * Robot_size_.x() * 0.25;
 
     for(vector<Eigen::Vector3d>::iterator ocit = occ_list.begin(); ocit != occ_list.end(); ocit++){
         if (is_ground_robot_) {
-            // Ignore points that are on the ground
-            if (ocit->z() <= ground_thresh) {
-                continue;
-            }
-
-            // Ignore points that are likely part of the robot's own body (simple cylindrical self-filter)
+            // Ignore points that are likely part of the robot's own body (simple cylindrical self-filter).
             double dx = ocit->x() - Robot_pos_.x();
             double dy = ocit->y() - Robot_pos_.y();
             if ((dx * dx + dy * dy < robot_radius_sq) && (ocit->z() < robot_z_max)) {

@@ -26,20 +26,25 @@ bool LowResMap::GetPath(const Eigen::Vector3d &start, const Eigen::Vector3d &end
 }
 
 bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, vector<Eigen::Vector3d> &path, const int &workid, int search_num, bool local){
+    Eigen::Vector3d search_start = start;
+    Eigen::Vector3d search_end = end;
+    ClampGroundSearchPos(search_start);
+    ClampGroundSearchPos(search_end);
+
     //check two points
     vector<shared_ptr<sch_node>> node_list; //to maintain nodes  
     if(local){
-        if(!IsLocalFeasible(start) || !IsLocalFeasible(end)){
+        if(!IsLocalFeasible(search_start) || !IsLocalFeasible(search_end)){
             FreeWorker(workid, node_list);
-            cout<<IsLocalFeasible(start)<<" "<<IsLocalFeasible(end)<<endl;
+            cout<<IsLocalFeasible(search_start)<<" "<<IsLocalFeasible(search_end)<<endl;
             ROS_WARN("error IsLocalFeasible");
             return false;
         }
     }
     else{
-        if(!IsFeasible(start) || !IsFeasible(end)){
+        if(!IsFeasible(search_start) || !IsFeasible(search_end)){
             FreeWorker(workid, node_list);
-            cout<<"A* feas"<<IsFeasible(start)<<" "<<IsFeasible(end)<<endl;
+            cout<<"A* feas"<<IsFeasible(search_start)<<" "<<IsFeasible(search_end)<<endl;
             ROS_WARN("error IsFeasible");
             return false;
         }
@@ -51,8 +56,8 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
 
     //standarlize
     Eigen::Vector3i std_start, std_end;
-    PostoId3(start, std_start);
-    PostoId3(end, std_end);
+    PostoId3(search_start, std_start);
+    PostoId3(search_end, std_end);
 
     //init
     c_node = make_shared<sch_node>();
@@ -77,9 +82,9 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
         if(std_end(0) - ep_node->pos_(0) == 0 && std_end(1) - ep_node->pos_(1) == 0 &&
             std_end(2) - ep_node->pos_(2) == 0){
             path.clear();
-            path.push_back(end);
+            path.push_back(search_end);
             RetrievePath(path, ep_node);
-            path.push_back(start);
+            path.push_back(search_start);
             reverse(path.begin(), path.end());
             FreeWorker(workid, node_list);
             // cout<<"search_iter:"<<search_iter<<endl;//debug
@@ -87,22 +92,23 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
         }
         //expand
         Eigen::Vector3i diff(0, 0, 0);
-        int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < 3; dim++){
+        int dim_limit = (is_ground_robot_ && GroundSearchTolZIdx() == 0) ? 2 : 3;
+        for(int dim = 0; dim < dim_limit; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
             for(int off = -1; off <= 1; off += 2){
                 diff(dim) = off;
-                    // if(x == 0 && y == 0 && z == 0) continue;    //the same node
-                lr_node = GetNode(IdtoPos(diff+ep_node->pos_));
+                Eigen::Vector3i next_pos = diff + ep_node->pos_;
+                if(is_ground_robot_ && !InGroundSearchBand(next_pos)) continue;
+                lr_node = GetNode(IdtoPos(next_pos));
                 if(lr_node == NULL || lr_node == Outnode_) continue;    //bad lrnode
                 if(lr_node->flags_[0]) continue;
                 c_node = lr_node->topo_sch_;
                 
                 if(c_node == NULL){                         //create a new node
                     c_node = make_shared<sch_node>();
-                    c_node->pos_ = ep_node->pos_ + diff;
+                    c_node->pos_ = next_pos;
                     c_node->g_score_ = ep_node->g_score_ + GetDist(diff(0), diff(1), diff(2));
                     c_node->f_score_ = c_node->g_score_ + GetHue(c_node->pos_, std_end)*lambda_heu_;
                     c_node->parent_ = ep_node;
@@ -121,7 +127,7 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
                         c_node = make_shared<sch_node>();/**/
                         lr_node->topo_sch_ = c_node; /**/
                         c_node->status_ = in_open;  /**/
-                        c_node->pos_ = ep_node->pos_ + diff;/**/
+                        c_node->pos_ = next_pos;/**/
                         c_node->f_score_ = g_tmp + GetHue(c_node->pos_, std_end)*lambda_heu_;
                         c_node->g_score_ = g_tmp;
                         c_node->parent_ = ep_node;
@@ -144,21 +150,26 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
 
 
 bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, list<Eigen::Vector3d> &path, const int &workid, int search_num, bool local){
+    Eigen::Vector3d search_start = start;
+    Eigen::Vector3d search_end = end;
+    ClampGroundSearchPos(search_start);
+    ClampGroundSearchPos(search_end);
+
     //check two points
     vector<shared_ptr<sch_node>> node_list; //to maintain nodes  
     if(local){
-        if(!IsLocalFeasible(start) || !IsLocalFeasible(end)){
+        if(!IsLocalFeasible(search_start) || !IsLocalFeasible(search_end)){
             FreeWorker(workid, node_list);
-            cout<<IsLocalFeasible(start)<<" "<<IsLocalFeasible(end)<<endl;
+            cout<<IsLocalFeasible(search_start)<<" "<<IsLocalFeasible(search_end)<<endl;
             ROS_WARN("error IsLocalFeasible");
             return false;
         }
     }
     else{
-        if(!IsFeasible(start) || !IsFeasible(end)){
+        if(!IsFeasible(search_start) || !IsFeasible(search_end)){
             FreeWorker(workid, node_list);
-            cout<<IsFeasible(start)<<" "<<IsFeasible(end)<<endl;
-            cout<<start.transpose()<<" "<<end.transpose()<<endl;
+            cout<<IsFeasible(search_start)<<" "<<IsFeasible(search_end)<<endl;
+            cout<<search_start.transpose()<<" "<<search_end.transpose()<<endl;
             ROS_WARN("error IsFeasible");
             return false;
         }
@@ -170,8 +181,8 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
 
     //standarlize
     Eigen::Vector3i std_start, std_end;
-    PostoId3(start, std_start);
-    PostoId3(end, std_end);
+    PostoId3(search_start, std_start);
+    PostoId3(search_end, std_end);
 
     //init
     c_node = make_shared<sch_node>();
@@ -193,31 +204,32 @@ bool LowResMap::Astar(const Eigen::Vector3d &start, const Eigen::Vector3d &end, 
         if(std_end(0) - ep_node->pos_(0) == 0 && std_end(1) - ep_node->pos_(1) == 0 &&
             std_end(2) - ep_node->pos_(2) == 0){
             path.clear();
-            path.push_back(end);
+            path.push_back(search_end);
             RetrievePath(path, ep_node);
-            path.push_front(start);
+            path.push_front(search_start);
             FreeWorker(workid, node_list);
             // cout<<"search_iter:"<<search_iter<<endl;//debug
             return true;
         }
         //expand
         Eigen::Vector3i diff(0, 0, 0);
-        int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < 3; dim++){
+        int dim_limit = (is_ground_robot_ && GroundSearchTolZIdx() == 0) ? 2 : 3;
+        for(int dim = 0; dim < dim_limit; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
             for(int off = -1; off <= 1; off += 2){
                 diff(dim) = off;
-                    // if(x == 0 && y == 0 && z == 0) continue;    //the same node
-                lr_node = GetNode(IdtoPos(diff+ep_node->pos_));
+                Eigen::Vector3i next_pos = diff + ep_node->pos_;
+                if(is_ground_robot_ && !InGroundSearchBand(next_pos)) continue;
+                lr_node = GetNode(IdtoPos(next_pos));
                 if(lr_node == NULL || lr_node == Outnode_) continue;    //bad lrnode
                 if(lr_node->flags_[0]) continue;
                 c_node = lr_node->topo_sch_;
                 
                 if(c_node == NULL){                         //create a new node
                     c_node = make_shared<sch_node>();
-                    c_node->pos_ = ep_node->pos_ + diff;
+                    c_node->pos_ = next_pos;
                     c_node->g_score_ = ep_node->g_score_ + GetDist(diff(0), diff(1), diff(2));
                     c_node->f_score_ = c_node->g_score_ + GetHue(c_node->pos_, std_end)*lambda_heu_;
                     c_node->parent_ = ep_node;
@@ -330,21 +342,22 @@ void LowResMap::Djkstra(int workid, Eigen::Vector3d start, list<Eigen::Vector3d>
 
         //expand
         Eigen::Vector3i diff(0, 0, 0);
-        int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < 3; dim++){
+        int dim_limit = (is_ground_robot_ && GroundSearchTolZIdx() == 0) ? 2 : 3;
+        for(int dim = 0; dim < dim_limit; dim++){
             diff(0) = 0;
             diff(1) = 0;
             diff(2) = 0;
             for(int off = -1; off <= 1; off += 2){
                 diff(dim) = off;
-                    // if(x == 0 && y == 0 && z == 0) continue;    //the same node
-                lr_node = GetNode(IdtoPos(diff+ep_node->pos_));
+                Eigen::Vector3i next_pos = diff + ep_node->pos_;
+                if(is_ground_robot_ && !InGroundSearchBand(next_pos)) continue;
+                lr_node = GetNode(IdtoPos(next_pos));
                 if(lr_node == NULL || lr_node == Outnode_) continue;    //bad lrnode
                 c_node = lr_node->topo_sch_;
                 
                 if(c_node == NULL){                         //create a new node
                     c_node = make_shared<sch_node>();
-                    c_node->pos_ = ep_node->pos_ + diff;
+                    c_node->pos_ = next_pos;
                     c_node->g_score_ = ep_node->g_score_ + GetDistL1(diff);
                     c_node->f_score_ = c_node->g_score_;
                     c_node->parent_ = ep_node;
@@ -396,19 +409,21 @@ bool LowResMap::DjkstraLocalDist(const Eigen::Vector3d &start, list<list<Eigen::
         if(c_node->status_ == in_close) continue;
         c_node->status_ = in_close;
 
-        int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < 3; dim++){
+        int dim_limit = (is_ground_robot_ && GroundSearchTolZIdx() == 0) ? 2 : 3;
+        for(int dim = 0; dim < dim_limit; dim++){
             Eigen::Vector3i diff(0, 0, 0);
             for(int off = -1; off <= 1; off += 2){
                 diff(dim) = off;
-                pos = IdtoPos(diff+c_node->pos_);
+                Eigen::Vector3i next_pos = diff + c_node->pos_;
+                if(is_ground_robot_ && !InGroundSearchBand(next_pos)) continue;
+                pos = IdtoPos(next_pos);
                 lr_node = GetNode(pos);
                 double g = c_node->g_score_ + GetDist(diff(0), diff(1), diff(2));
                 if((pos - start).norm() > eu_range_ || g > max_g_cost_) continue;
                 if(lr_node == NULL || lr_node->flags_[0] || lr_node == Outnode_) continue;
                 if(NULL == lr_node->topo_sch_) {
                     lr_node->topo_sch_ = make_shared<sch_node>();
-                    lr_node->topo_sch_->pos_ = c_node->pos_ + diff;
+                    lr_node->topo_sch_->pos_ = next_pos;
                     node_list.emplace_back(lr_node->topo_sch_);
                 }
                 n_node = lr_node->topo_sch_;
@@ -418,7 +433,7 @@ bool LowResMap::DjkstraLocalDist(const Eigen::Vector3d &start, list<list<Eigen::
                     n_node->status_ = in_close;
                     lr_node->topo_sch_ = make_shared<sch_node>();
                     lr_node->topo_sch_->status_ = in_open;
-                    lr_node->topo_sch_->pos_ = c_node->pos_ + diff;
+                    lr_node->topo_sch_->pos_ = next_pos;
                     lr_node->topo_sch_->g_score_ = c_node->g_score_ + GetDist(diff(0), diff(1), diff(2));
                     lr_node->topo_sch_->parent_ = c_node;
                 }
@@ -496,13 +511,15 @@ void LowResMap::DjkstraLocal(Eigen::Vector3d start){
         b_n_id.second = GetNodeId(c_node->pos_, gridBLK_[b_n_id.first]);
         H_Topolist_.emplace_back(b_n_id);
         c_node->h_status_ = in_close;
-        int dim_limit = is_ground_robot_ ? 2 : 3;
-        for(int dim = 0; dim < 3; dim++){
+        int dim_limit = (is_ground_robot_ && GroundSearchTolZIdx() == 0) ? 2 : 3;
+        for(int dim = 0; dim < dim_limit; dim++){
             Eigen::Vector3i diff(0, 0, 0);
             for(int off = -1; off <= 1; off += 2){
                 // ROS_WARN("DjkstraLocal4");
                 diff(dim) = off;
-                pos = IdtoPos(diff+c_node->pos_);
+                Eigen::Vector3i next_pos = diff + c_node->pos_;
+                if(is_ground_robot_ && !InGroundSearchBand(next_pos)) continue;
+                pos = IdtoPos(next_pos);
                 lr_node = GetNode(pos);
                 if(lr_node == NULL || !lr_node->flags_[1] || lr_node == Outnode_ || lr_node->flags_[0]) continue;
                 double g = c_node->h_g_score_ + GetDist(diff(0), diff(1), diff(2))*1.0001;

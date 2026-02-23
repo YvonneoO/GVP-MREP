@@ -431,6 +431,10 @@ private:
     inline void SetEXPNode(const int &b_id, const int &n_id, const Eigen::Vector3i &bk3i);       
     inline void UpdateRobotNavPos();
     inline double GroundFilterThresh() const;
+    inline int GroundSearchCenterZIdx() const;
+    inline int GroundSearchTolZIdx() const;
+    inline bool InGroundSearchBand(const Eigen::Vector3i &id3) const;
+    inline void ClampGroundSearchPos(Eigen::Vector3d &pos) const;
     inline void PostoId3(const Eigen::Vector3d &pos, Eigen::Vector3i &id3);              //dont check
     inline Eigen::Vector3i GetBolckSize(const Eigen::Vector3i &blockid);              //dont check
     inline int CheckNode(const Eigen::Vector3i pos);
@@ -527,6 +531,27 @@ inline void LowResMap::UpdateRobotNavPos(){
 
 inline double LowResMap::GroundFilterThresh() const{
     return std::max(robot_height_ - ground_filter_margin_, map_lowbd_(2));
+}
+
+inline int LowResMap::GroundSearchCenterZIdx() const{
+    if(voxel_num_(2) <= 0) return 0;
+    int z_id = floor((robot_height_ - origin_(2)) / node_scale_(2));
+    return std::max(0, std::min(z_id, voxel_num_(2) - 1));
+}
+
+inline int LowResMap::GroundSearchTolZIdx() const{
+    if(!is_ground_robot_ || node_scale_(2) <= 1e-6) return 0;
+    return std::max(0, int(ceil(ground_filter_margin_ / node_scale_(2))));
+}
+
+inline bool LowResMap::InGroundSearchBand(const Eigen::Vector3i &id3) const{
+    if(!is_ground_robot_) return true;
+    return abs(id3(2) - GroundSearchCenterZIdx()) <= GroundSearchTolZIdx();
+}
+
+inline void LowResMap::ClampGroundSearchPos(Eigen::Vector3d &pos) const{
+    if(!is_ground_robot_) return;
+    pos(2) = std::max(map_lowbd_(2), std::min(robot_height_, map_upbd_(2)));
 }
 
 // inline double LowResMap::GetLocalDist(const Eigen::Vector3d &pos){
@@ -1490,9 +1515,6 @@ inline int LowResMap::CheckNode(const Eigen::Vector3i pos){
     startpos(1) += resolution_/2;
     startpos(2) += resolution_/2;
 
-    // Ground plane & robot geometry
-    const double ground_thresh   = GroundFilterThresh();
-
     // Self-filter parameters
     const double robot_z_max = Robot_pos_.z() + Robot_size_.z();
     const double robot_radius_sq = Robot_size_.x() * Robot_size_.x() * 0.25;
@@ -1507,11 +1529,7 @@ inline int LowResMap::CheckNode(const Eigen::Vector3i pos){
 
         if(cstatus == VoxelState::occupied){
             if (is_ground_robot_) {
-                // Filter 1: Ignore ground plane
-                if (chk_pos(2) <= ground_thresh) {
-                    continue;
-                }
-                // Filter 2: Ignore robot's own body
+                // Ignore only the robot's own body. Keep all low-z obstacles (e.g. wall bases).
                 double dx = chk_pos.x() - Robot_pos_.x();
                 double dy = chk_pos.y() - Robot_pos_.y();
                 if ((dx * dx + dy * dy < robot_radius_sq) && (chk_pos.z() < robot_z_max)) {
