@@ -13,6 +13,17 @@
 # GVP-MREP
 Fast and Communication-Efficient Multi-UAV Exploration Via Voronoi Partition on Dynamic Topological Graph (IROS 2024 accepted)
 
+# 0. For Roboteram Benchmark:
+Go to gvpmrep docker container: 
+
+```docker exec -it gvpmrep bash```
+
+```cd ../GVP-MREP```
+1. Run exploration ```roslaunch murder_swarm hetero_891office.launch```.
+2. At the same time,  run the exploration percentage statistic tool in map_manager: ```roslaunch map_manager heter_robo_occ_map_statistics.launch```.
+3. Record DTG: ```roslaunch multiDTG dtg_recorder.launch```. The results are DTG snapshot recording files under ```/root/home/heter_benchmark_ws/src/GVP-MREP```.
+4. Run ```roslaunch multiDTG dtg_reader.launch``` to analyze the files and generate results files under same folder.
+
 # 1. Overview
 **GVP-MREP** is a distributed and communication-efficient multi-UAV exploration system. For lightweight multi-UAV communication, a multi-robot dynamic topological graph (MR-DTG) is designed. Supported by MR-DTG, graph Voronoi partition (GVP) is adopted to allocate exploration tasks to each UAV. Each UAV operates GVP and optimizes trajectories to their targets distributedly.   
 <p align="left">
