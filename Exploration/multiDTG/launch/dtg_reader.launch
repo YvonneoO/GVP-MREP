@@ -1,9 +1,11 @@
 <launch>
-    <arg name="dtg_log_file" default="/root/GVP-MREP/logs/dtg_dumps/dtg_snapshot_rid0_2929119934529.csv"/>
+    <arg name="dtg_log_file" default="/root/GVP-MREP/logs/dtg_dumps/dtg_snapshot_rid1_594599986710.csv"/>
     <arg name="results_dir" default="/root/GVP-MREP/logs/dtg_dumps/"/>
 
     <node pkg="multiDTG" type="dtg_reader_node" name="dtg_reader" output="screen">
         <param name="dtg_log_file" value="$(arg dtg_log_file)"/>
         <param name="results_dir" value="$(arg results_dir)"/>
+        <rosparam param="start_pos"> [-0.35,0.35,0.35] </rosparam>
+        <rosparam param="goal_pos"> [9.61486,-8.60767,1.83629] </rosparam>
     </node>
 </launch>

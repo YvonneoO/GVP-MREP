@@ -48,6 +48,11 @@ public:
         nh.param<std::string>("dtg_log_file", dtg_log_file_, "");
         nh.param<std::string>("results_dir", results_dir_, "");
         
+        // Read optional start and goal points from parameters
+        std::vector<double> start_p, goal_p;
+        bool has_start = nh.getParam("start_pos", start_p) && start_p.size() == 3;
+        bool has_goal = nh.getParam("goal_pos", goal_p) && goal_p.size() == 3;
+
         if (dtg_log_file_.empty()) {
             ROS_ERROR("[DTGReader] dtg_log_file parameter is empty!");
         } else {
@@ -67,7 +72,15 @@ public:
         
         vis_timer_ = nh_.createWallTimer(ros::WallDuration(1.0), &DTGReader::visCB, this);
 
-        ROS_INFO("[DTGReader] Initialized. Click points in RViz to find paths.");
+        if (has_start && has_goal) {
+            Eigen::Vector3d start(start_p[0], start_p[1], start_p[2]);
+            Eigen::Vector3d goal(goal_p[0], goal_p[1], goal_p[2]);
+            ROS_INFO("[DTGReader] Direct input detected. Finding path from (%.2f, %.2f, %.2f) to (%.2f, %.2f, %.2f)",
+                     start.x(), start.y(), start.z(), goal.x(), goal.y(), goal.z());
+            findAndVisualizePath(start, goal);
+        } else {
+            ROS_INFO("[DTGReader] Initialized. Click points in RViz to find paths.");
+        }
     }
 
 private:
@@ -271,9 +284,9 @@ private:
             // Reconstruct paths for all F-nodes from this H-node
             for (uint32_t goalId : f_node_ids_) {
                 FullPath fp;
-                
+                fp.length = 0.0;
                 if (nodes_[goalId].visited || goalId == startId) {
-                    fp.length = nodes_[goalId].g;
+                    // fp.length = nodes_[goalId].g;
                     uint32_t curr = goalId;
                     while (curr != 0) {
                         fp.nodePath.push_back(curr);
@@ -291,6 +304,13 @@ private:
                         }
                         curr = prev;
                     }
+                    // calculate the length of the path by looping through the path points
+                    if (fp.points.size() >= 2) {
+                        for (size_t i = 0; i < fp.points.size() - 1; ++i) {
+                            fp.length += (fp.points[i] - fp.points[i + 1]).norm();
+                        }
+                    }
+                    // std::cout << "Path length: " << fp.length << " (Points: " << fp.points.size() << ")" << std::endl;
                     std::reverse(fp.nodePath.begin(), fp.nodePath.end());
                 } else {
                     // Path not found
@@ -300,6 +320,8 @@ private:
                 all_reconstructed_paths_[startId][goalId] = fp;
             }
         }
+        std::cout << "All reconstructed paths size: " << all_reconstructed_paths_.size() << std::endl;
+
         
         size_t total_paths = 0;
         for (const auto& pair : all_reconstructed_paths_) total_paths += pair.second.size();
@@ -337,14 +359,28 @@ private:
             std::ofstream ofs(final_output_file);
             if (ofs.is_open()) {
                 ofs << "start_node,goal_node,start_x,start_y,start_z,goal_x,goal_y,goal_z,length,num_points,path_points\n";
-                for (const auto& h_pair : all_reconstructed_paths_) {
+                for (auto& h_pair : all_reconstructed_paths_) {
                     uint32_t hId = h_pair.first;
                     const auto& sn = nodes_[hId];
-                    for (const auto& f_pair : h_pair.second) {
+                    for (auto& f_pair : h_pair.second) {
                         uint32_t fId = f_pair.first;
                         const auto& gn = nodes_[fId];
-                        const auto& fp = f_pair.second;
-                        
+                        auto& fp = f_pair.second;
+
+                        // loop through the actual path and do valid check:
+                        // the first point should be close to sn.pos, and the last point should be close to gn.pos
+                        bool valid_path = false;
+                        if (!fp.points.empty()) {
+                            double first_point_dist = (fp.points.front() - sn.pos).norm();
+                            double last_point_dist = (fp.points.back() - gn.pos).norm();
+                            if (first_point_dist < 1.0 && last_point_dist < 1.0) {
+                                valid_path = true;
+                            }
+                        }
+                        if (!valid_path) {
+                            fp.length = std::numeric_limits<double>::infinity();
+                            fp.points.clear();
+                        }
                         ofs << hId << "," << fId << ","
                             << sn.pos.x() << "," << sn.pos.y() << "," << sn.pos.z() << ","
                             << gn.pos.x() << "," << gn.pos.y() << "," << gn.pos.z() << ","
@@ -408,6 +444,11 @@ private:
             all_reconstructed_paths_[startNodeId].count(goalNodeId)) {
             
             const auto& fp = all_reconstructed_paths_[startNodeId][goalNodeId];
+            
+            // Store path for persistent visualization
+            latest_path_points_ = fp.points;
+            has_path_to_vis_ = true;
+
             publishPathMarkers(fp.points);
             ROS_INFO("[DTGReader] Path retrieved from cache! Points: %zu, Length: %.2f", 
                      fp.points.size(), fp.length);
@@ -531,6 +572,11 @@ private:
         ma.markers.push_back(hf_edges);
 
         graph_pub_.publish(ma);
+
+        // Also publish path if it exists
+        if (has_path_to_vis_) {
+            publishPathMarkers(latest_path_points_);
+        }
     }
 
     ros::NodeHandle nh_;
@@ -546,6 +592,9 @@ private:
     std::vector<uint32_t> f_node_ids_;
     std::vector<Eigen::Vector3d> points_;
     std::unordered_map<uint32_t, std::unordered_map<uint32_t, FullPath>> all_reconstructed_paths_; // hNodeId -> (fNodeId -> path)
+
+    std::vector<Eigen::Vector3d> latest_path_points_;
+    bool has_path_to_vis_ = false;
 };
 
 } // namespace DTG
