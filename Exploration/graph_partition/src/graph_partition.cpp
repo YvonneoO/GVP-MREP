@@ -13,9 +13,10 @@ void GraphVoronoiPartition::init(ros::NodeHandle &nh, ros::NodeHandle &nh_privat
     nh_private.param(ns + "/GVD/partition_frequency", par_freq, 0.3);
 
     debug_pub_ = nh.advertise<visualization_msgs::Marker>(ns + "/GVD/Debug", 5);
-    if(SDM_->is_ground_){
-        show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns + "/GVD/GraphPartition", 5);
-    }
+    // if(SDM_->is_ground_){
+    //     show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns + "/GVD/GraphPartition", 5);
+    // }
+    show_pub_ = nh.advertise<visualization_msgs::MarkerArray>(ns + "/GVD/GraphPartition", 5);
 
     job_timer_ = nh.createTimer(ros::Duration(0.25), &GraphVoronoiPartition::JobTimerCallback, this);
     state_timer_ = nh.createTimer(ros::Duration(0.1), &GraphVoronoiPartition::StateTimerCallback, this);
@@ -413,7 +414,8 @@ void GraphVoronoiPartition::HandleGlobalData(list<h_ptr> &hn_l){
     // (*local_fn_).clear();
     (*GVP_hn_).clear();
     
-    if(SDM_->is_ground_) ShowPartition(hn_l);
+    // if(SDM_->is_ground_) ShowPartition(hn_l);
+    ShowPartition(hn_l);
 
     for(auto &hn : hn_l){
         if(hn->sch_node_->root_id_ == SDM_->self_id_){
@@ -944,6 +946,7 @@ void GraphVoronoiPartition::PartitionTimerCallback(const ros::TimerEvent &e){
 }
 
 void GraphVoronoiPartition::ShowPartition(list<h_ptr> &hn_l){
+    cout<<"ShowPartition:"<<hn_l.size()<<endl;
     visualization_msgs::MarkerArray mka;
     mka.markers.resize(1);
     mka.markers[0].header.frame_id = "world";

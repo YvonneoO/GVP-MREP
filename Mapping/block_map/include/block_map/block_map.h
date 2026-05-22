@@ -202,6 +202,7 @@ private:
     ros::NodeHandle nh_, nh_private_;
     ros::Subscriber odom_sub_, sensor_sub_, camparam_sub_;
     ros::Publisher vox_pub_, debug_pub_;
+    ros::Publisher debug_pcl_world_pub_;
     ros::Timer show_timer_, debug_timer_;
     vector<std_msgs::ColorRGBA> color_list_;
     double colorhsize_;

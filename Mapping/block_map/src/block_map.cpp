@@ -259,6 +259,7 @@ void BlockMap::init(ros::NodeHandle &nh, ros::NodeHandle &nh_private){
 
     vox_pub_ = nh_.advertise<visualization_msgs::MarkerArray>(ns + "/block_map/voxvis", 10);
     debug_pub_ = nh_.advertise<visualization_msgs::Marker>(ns + "/block_map/debug", 10);
+    debug_pcl_world_pub_ = nh_.advertise<sensor_msgs::PointCloud2>(ns + "/block_map/debug_pcl_world", 5);
 
     if(stat_) {
         statistic_pub_ = nh.advertise<std_msgs::Float32>(ns + "/block_map/stat_v", 1);
@@ -701,6 +702,11 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
         initial_free_pts_pending_ = false;
     }
     cam3i = PostoId3(cam2world_.block(0,3,3,1));
+
+    pcl::PointCloud<pcl::PointXYZI> debug_world_cloud;
+    debug_world_cloud.reserve(8192);
+    const bool debug_pub_enabled = debug_pcl_world_pub_.getNumSubscribers() > 0;
+
     if(InsideMap(cam3i)){
         LoadSwarmFilter();
         cam = cam2world_.block(0,3,3,1);
@@ -710,6 +716,7 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
         pcl::fromROSMsg(*pcl, *points);
         pcl::removeNaNFromPointCloud(*points, *points, indices);
         cur_pcl_.clear();
+        cout << "'[BlockMap::InsertPcl] cam2world_: \n" << cam2world_ << endl;
 
         for(pcl::PointCloud<pcl::PointXYZ>::const_iterator pcl_it = points->begin(); pcl_it != points->end(); pcl_it++){
             bool occ;
@@ -725,6 +732,18 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             occ = dir.norm() <= max_range_;
             if(!occ)
                 end_point = cam + (end_point - cam).normalized() * max_range_;
+
+            // Intensity encodes raw-point classification BEFORE map-bounds clipping:
+            //   1.0 = within max_range_ (will be inserted as occupied)
+            //   0.0 = beyond max_range_ (clamped, used only for free-space raycasting)
+            if(debug_pub_enabled){
+                pcl::PointXYZI dp;
+                dp.x = static_cast<float>(end_point(0));
+                dp.y = static_cast<float>(end_point(1));
+                dp.z = static_cast<float>(end_point(2));
+                dp.intensity = occ ? 1.0f : 0.0f;
+                debug_world_cloud.push_back(dp);
+            }
 
             GetRayEndInsideMap(cam, end_point, occ);
             if(!GetVox(block_id, vox_id, end_point)) continue;
@@ -804,6 +823,14 @@ void BlockMap::InsertPcl(const sensor_msgs::PointCloud2ConstPtr &pcl){
             }
         }
         ROS_INFO("insert pcl callback finished, newly_register_idx_ size: %d", newly_register_idx_.size());
+    }
+
+    if(debug_pub_enabled && !debug_world_cloud.empty()){
+        sensor_msgs::PointCloud2 cloud_msg;
+        pcl::toROSMsg(debug_world_cloud, cloud_msg);
+        cloud_msg.header.frame_id = "world";
+        cloud_msg.header.stamp = pcl->header.stamp;
+        debug_pcl_world_pub_.publish(cloud_msg);
     }
 }
 

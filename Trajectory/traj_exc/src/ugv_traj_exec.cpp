@@ -567,7 +567,7 @@ void LoadParameters(ros::NodeHandle& nh_private) {
     ROS_INFO("yaw_goal_tolerance: %f", yaw_goal_tolerance_);
     nh_private.param("/control_rate", control_rate_, 30.0);
     ROS_INFO("control_rate: %f", control_rate_);
-    nh_private.param("/initial_backward_distance", initial_backward_distance_, 5.0);
+    nh_private.param("/initial_backward_distance", initial_backward_distance_, 2.0);
     ROS_INFO("initial_backward_distance: %f", initial_backward_distance_);
     nh_private.param("/rotation_target_pos_threshold", rotation_target_pos_thresh_, 0.2);
     nh_private.param("/rotation_target_yaw_threshold", rotation_target_yaw_thresh_, 0.2);
