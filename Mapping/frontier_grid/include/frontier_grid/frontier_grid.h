@@ -407,6 +407,8 @@ inline bool FrontierGrid::GetVpPos(const int &f_idx, const int &v_id, Eigen::Vec
         v_pos(1) = length * vdir_cos * hdir_sin + f_grid_[f_idx].center_(1);
         v_pos(0) = length * vdir_cos * hdir_cos + f_grid_[f_idx].center_(0);
 
+        if(is_ground_robot_) v_pos(2) = robot_height_;
+
         return true;
 }
 
@@ -430,6 +432,7 @@ inline bool FrontierGrid::GetVp(const int &f_idx, const int &v_id, Eigen::Vector
         v_pose(1) = length * vdir_cos * hdir_sin + f_grid_[f_idx].center_(1);
         v_pose(0) = length * vdir_cos * hdir_cos + f_grid_[f_idx].center_(0);
 
+        if(is_ground_robot_) v_pose(2) = robot_height_;
         return true;
     // }
     // else return false;
@@ -451,6 +454,8 @@ inline bool FrontierGrid::GetVp(const Eigen::Vector3d &f_center, const int &v_id
     v_pose(2) = length * vdir_sin + f_center(2);
     v_pose(1) = length * vdir_cos * hdir_sin + f_center(1);
     v_pose(0) = length * vdir_cos * hdir_cos + f_center(0);
+
+    if(is_ground_robot_) v_pose(2) = robot_height_;
 
     return true;
 }

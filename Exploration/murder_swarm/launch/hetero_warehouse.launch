@@ -1,5 +1,5 @@
 <launch>
-  <arg name="world" default="891office" />
+  <arg name="world" default="warehouse" />
   <arg name="gui" default="true" />
   <arg name="drone_num" value="2" />
 

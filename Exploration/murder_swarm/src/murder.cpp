@@ -261,7 +261,7 @@ bool Murder::LocalPlan(){
     c_state.block(0, 0, 3, 1) = p_;
     c_state(3) = yaw_;
     GVP_.GetLocalFNodes(c_state, v_, path, path_cost, t_state, f_v, h_id, exp_state);
-    // cout<<"id:"<<int(SDM_.self_id_)<<"exp_state:"<<exp_state<<"---"<<t_state.transpose()<<endl;
+    ROS_INFO("id:%d exp_state:%d --- (%d,%d,%d)", SDM_.self_id_, exp_state, t_state(0), t_state(1), t_state(2));
     switch (exp_state)
     {
     case 0:{ // free path
@@ -269,6 +269,7 @@ bool Murder::LocalPlan(){
         target_ = t_state;
         target_vp_pose_ = t_state;
         dangerous_path_ = false;
+        ROS_INFO("id:%d free path", SDM_.self_id_);
         break;
     }
     case 1:{ // dangerous path
@@ -280,8 +281,8 @@ bool Murder::LocalPlan(){
             // safe_path = path;
             target_(3) = atan2(unknown_path.front()(1) - safe_path.back()(1), unknown_path.front()(0) - safe_path.back()(0));
             target_.block(0, 0, 3, 1) = safe_path.back();
-            // ROS_ERROR("!!!");
-            // cout<<"target_:"<<target_.transpose()<<"    !!!"<<" safe_num:"<<safe_path.size()<<"  unknown_num:"<<unknown_path.size()<<endl;//debug
+            ROS_ERROR("!!!");
+            ROS_INFO("id:%d target_:(%f,%f,%f)    !!! safe_num:%d  unknown_num:%d", SDM_.self_id_, target_(0), target_(1), target_(2), safe_path.size(), unknown_path.size());//debug
             // if(!LRM_.IsFeasible(safe_path.back())){
             //     ROS_ERROR("id:%d dangerous local plan, fail!", SDM_.self_id_);
             //     for(auto &pt : path) cout<<"path:"<<pt.transpose()<<" feas:"<<int(LRM_.IsFeasible(pt))<<endl;
@@ -293,8 +294,8 @@ bool Murder::LocalPlan(){
         }
         else{
             target_ = t_state;
-            // ROS_ERROR("???");
-            // cout<<"target_:"<<target_.transpose()<<"    ???"<<endl;//debug
+            ROS_ERROR("???");
+            ROS_INFO("id:%d target_:(%f,%f,%f)    ???", SDM_.self_id_, target_(0), target_(1), target_(2));//debug
         }
         break;
     }

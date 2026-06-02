@@ -349,7 +349,7 @@ int main(int argc, char** argv){
     nh_private.param(ns + "/opt/MaxAcc", max_a_, 1.5);
     nh_private.param(ns + "/opt/YawVel", max_yawd_, 1.5);
     nh_private.param(ns + "/opt/YawAcc", max_yawdd_, 1.5);
-
+    cout << "takeoff_pos_: " << takeoff_pos_.transpose() << endl;
     if(auto_takeoff){
         std_msgs::EmptyPtr e;
         ros::Duration(3.0).sleep();

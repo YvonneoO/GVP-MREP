@@ -1,5 +1,7 @@
-# ugv / spot, 2d motion
-is_ground_robot: false
+# ugv, 2d motion
+is_ground_robot: true
+robot_height: 0.14
+initial_scan: true
 
 Frontier/sample_max_range: 2.2 # max dist from vp to ft grid center
 Frontier/grid_scale: 2.0 # ft grid cell size
@@ -10,11 +12,11 @@ Frontier/sample_hor_dir_num: 10 # num of vps in the horizontal direction
 Frontier/sample_ver_dir_num: 3 # num of vps in the vertical direction
 Frontier/sample_dist_num: 2 # num of vps between the ft and sample_max_range
 
-Frontier/sensor_type: "Depth_Camera"
-Frontier/FOV_hor_num: 15
-Frontier/FOV_ver_num: 10
-Frontier/cam_hor: 1.9
-Frontier/cam_ver: 1.046
+# Frontier/sensor_type: "Depth_Camera"
+# Frontier/FOV_hor_num: 15
+# Frontier/FOV_ver_num: 10
+# Frontier/cam_hor: 1.9
+# Frontier/cam_ver: 1.046
 
 # Frontier/sensor_type: "Livox"
 # Frontier/FOV_hor_num: 35
@@ -22,11 +24,11 @@ Frontier/cam_ver: 1.046
 # Frontier/livox_ver_up: 1.308
 # Frontier/livox_ver_low: -0.175
 
-# Frontier/sensor_type: "Ouster" # sensor type
-# Frontier/FOV_hor_num: 35 # num of samples for fov approx to calc info gain
-# Frontier/FOV_ver_num: 10 # num of samples for fov approx to calc info gain
-# Frontier/ouster_ver_up: 0.384 # vertical FOV up limit
-# Frontier/ouster_ver_low: -0.384 # vertical FOV down limit
+Frontier/sensor_type: "Ouster" # sensor type
+Frontier/FOV_hor_num: 35 # num of samples for fov approx to calc info gain
+Frontier/FOV_ver_num: 10 # num of samples for fov approx to calc info gain
+Frontier/ouster_ver_up: 0.384 # vertical FOV up limit
+Frontier/ouster_ver_low: -0.384 # vertical FOV down limit
 
 Frontier/ray_samp_dist1: 0.2 # 1st raycasting step size -> determine ft boundary
 Frontier/ray_samp_dist2: 0.1 # finer raycasting step size -> info gain calc
@@ -37,17 +39,17 @@ Frontier/min_vp_num: 2 # min alive vps in a ft grid to remain exploring (infeasi
 # filter point cloud for robot body
 block_map/RobotVisX: 1.2
 block_map/RobotVisY: 0.8
-block_map/RobotVisZ: 0.8
-block_map/bline_occ_range: 0.7
+block_map/RobotVisZ: 0.4
+block_map/bline_occ_range: 0.8
 block_map/swarm_tol: 0.3 # time tolerance for robot pose timestamp
 block_map/swarm_send_delay: 2.0 # delay time to send map info
 block_map/swarm_pub_thresh: 0.975 # map sharing threshold
 block_map/minX: -18.3
-block_map/minY: -15.9
-block_map/minZ: -0.1
-block_map/maxX: 21.5
-block_map/maxY: 19.3
-block_map/maxZ: 3.0
+block_map/minY: -29.34
+block_map/minZ: 0.1
+block_map/maxX: 18.8
+block_map/maxY: 31.42
+block_map/maxZ: 4.0
 block_map/blockX: 15
 block_map/blockY: 15
 block_map/blockZ: 15
@@ -79,13 +81,13 @@ Exp/show_swarm_traj: false
 EXP/finish_hold_duration: 15.0 # confirmation period before terminating exploration
 Exp/robot_sizeX: 1.2
 Exp/robot_sizeY: 0.8
-Exp/robot_sizeZ: 0.8
-Exp/minX: -18.3
-Exp/minY: -15.9
-Exp/minZ: 0.0
-Exp/maxX: 21.5
-Exp/maxY: 19.3
-Exp/maxZ: 3.0
+Exp/robot_sizeZ: 0.4
+Exp/minX: -18.3 
+Exp/minY: -29.34
+Exp/minZ: 0.1
+Exp/maxX: 18.8
+Exp/maxY: 31.42
+Exp/maxZ: 4.0
 Exp/traj_length: 10.0 # max path length to be considered for corridor generation
 Exp/local_path_search: 1000
 Exp/global_path_search: 3000
@@ -93,8 +95,8 @@ Exp/strong_check_interval: 3.0 # vp strong check interval
 Exp/check_duration: 3.5 # traj collision check time window
 Exp/exc_duration: 0.5 # min exc time before replanning
 Exp/replan_duration: 1.5
-Exp/takeoff_x: 1
-Exp/takeoff_y: -1
+Exp/takeoff_x: 0.0
+Exp/takeoff_y: 0.0
 Exp/takeoff_z: 0.14  # UGV base_link odometry height
 Exp/takeoff_yaw: 0.0
 Exp/reach_out_t: 0.1
@@ -155,7 +157,7 @@ LowResMap/show_dtg: false
 opt/YawVel: 2.2
 opt/YawAcc: 2.2
 opt/MaxVel: 1.5
-opt/MaxAcc: 0.3
+opt/MaxAcc: 1.5
 opt/MaxJer: 25.0
 opt/SwarmAvoid: 1.2
 opt/WeiPos: 5000.0
@@ -170,7 +172,7 @@ opt/integralIntervs: 16
 opt/RelCostTolL: 1.0e-5
 
 Computation/data_num: 3
-Computation/dir: /home/yqqy/GVP-MREP/src/GVP-MREP/data/ground/891office
+Computation/dir: /home/yqqy/GVP-MREP/src/GVP-MREP/data/UGV/891office
 Computation/data_name0: gvp
 Computation/data_name1: local
 Computation/data_name2: global

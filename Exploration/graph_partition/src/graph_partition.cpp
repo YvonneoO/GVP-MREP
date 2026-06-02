@@ -469,7 +469,7 @@ void GraphVoronoiPartition::GetLocalFNodes(const Eigen::Vector4d &c_state, const
     for(auto &hn : hn_l) {
         targets.emplace_back(hn->pos_);
     }
-    // cout<<"id:"<<int(SDM_->self_id_)<<"hn_l:"<<hn_l.size()<<"  lowbd:"<<lowbd.transpose()<<"   upbd:"<<upbd.transpose()<<endl;
+    cout<<"id:"<<int(SDM_->self_id_)<<"hn_l:"<<hn_l.size()<<"  lowbd:"<<lowbd.transpose()<<"   upbd:"<<upbd.transpose()<<endl;
 
     /* local Djkstra search */
     if(!LRM_->DjkstraLocalDist(c_state.block(0, 0, 3, 1), paths, pruned_paths, targets, dist_l)) {
