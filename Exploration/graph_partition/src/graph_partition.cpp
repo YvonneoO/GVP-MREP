@@ -703,13 +703,17 @@ void GraphVoronoiPartition::GetGlobalFNodes(const Eigen::Vector4d &c_state, list
         MDTG_->FullSearch(fake_hn, d_p, hn_t);
             /* get best hn and fn */
         // cout<<"id:"<<int(SDM_->self_id_)<<"  FullSearch target:"<<hn_t.size()<<endl;
+        ROS_INFO("id:%d FullSearch target size:%lu", SDM_->self_id_, hn_t.size());
         if(GetBestTarget(d_p, hn_t, best_f, path, t_state, f_v, h_id)){
-            // cout<<"id:"<<int(SDM_->self_id_)<<"  have_target2"<<endl;
+            ROS_INFO("id:%u GetBestTarget success", SDM_->self_id_);
             have_target = true;
         }
+        else ROS_INFO("id:%u GetBestTarget failed", SDM_->self_id_);
     }
+    else ROS_INFO("id:%u have_target1", SDM_->self_id_);
 
     if(have_target){
+        ROS_INFO("id:%u try to find shorter path", SDM_->self_id_);
         /** try to find shorter path **/
         list<Eigen::Vector3d> shorter_path;
         Eigen::Vector3d ps, safe_pt;
@@ -747,10 +751,12 @@ bool GraphVoronoiPartition::LocalExplorable(){
         if(!MDTG_->FindHnode(hn_id.first, hn_id.second, hn)) continue;
         for(auto &hfe : hn->hf_edges_){
             if((hfe->e_flag_ & 16) && hfe->tail_n_->cf_->f_state_ == 1 && (hfe->tail_n_->f_flag_ & 2)){
+                ROS_INFO("id:%d LocalExplorable success", SDM_->self_id_);
                 return true;
             }
         }
     }
+    ROS_INFO("id:%d LocalExplorable failed", SDM_->self_id_);
     return false;
 }
 
@@ -772,10 +778,12 @@ bool GraphVoronoiPartition::GlobalExplorable(){
     for(auto &hn : MDTG_->H_list_){
         for(auto &hfe : hn->hf_edges_){
             if((hfe->e_flag_ & 16) && hfe->tail_n_->cf_->f_state_ == 1){
+                ROS_INFO("id:%d GlobalExplorable success", SDM_->self_id_);
                 return true;
             }
         }
     }
+    ROS_INFO("id:%d GlobalExplorable failed", SDM_->self_id_);
     return false;
 }
 

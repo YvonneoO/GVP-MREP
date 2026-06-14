@@ -1005,7 +1005,9 @@ bool Murder::TrajPlanB(const Eigen::Vector3d &ps, const Eigen::Vector3d &vs, con
                     yaw_end = atan2(gazept(1) - traj_end(1), gazept(0) - traj_end(0));
                     PlanYaw(yps, yds, ydds, yaw_end, yde, ydde, gazept, false);
 
-                }            
+                }
+                // UAV (sim): ignore dynamics, re-time to constant MaxVel / YawVel.
+                if(SDM_.self_id_ == 1) RegulateUavTraj();
                 return true;
             }
             else{
@@ -1118,6 +1120,123 @@ void Murder::PublishTraj(bool recover){
     }
     SDM_.SetTraj(TrajOpt_.traj, traj_start_t_);
     traj_pub_.publish(traj);
+}
+
+void Murder::RegulateUavTraj(){
+    // Rewrite TrajOpt_.traj and YawP_ in place so the UAV (in sim) ignores dynamics:
+    // position moves at exactly opt/MaxVel and yaw at exactly opt/YawVel. Position and yaw
+    // are re-timed on independent timelines (a translation-only RC command and a yaw-rate
+    // command), then the shorter DOF is padded with a hold piece so both share one total
+    // duration (the executor samples position and yaw on a single clock). Because we mutate
+    // the canonical TrajOpt_.traj / YawP_, all downstream users (replan handoff sampling,
+    // traj_end_t_/replan_t_, PublishTraj, swarm SetTraj) stay consistent automatically.
+    const double total_dur = TrajOpt_.traj.getTotalDuration();
+    if(total_dur <= 1e-4) return;
+
+    const double max_v = TrajOpt_.upboundVec_[0];   // opt/MaxVel
+    const double max_w = YawP_.v_max_;              // opt/YawVel
+    if(max_v <= 1e-3 || max_w <= 1e-3) return;
+
+    const double samp_dt   = 0.05;   // [s] sampling step along the original trajectory
+    const double min_seg_l = 0.25;   // [m]   emit a waypoint at least this often in space
+    const double min_seg_y = 0.20;   // [rad] or this often in yaw
+    const double min_dur   = 1e-4;
+
+    // 1) Resample (position, unwrapped yaw) pairs from the optimized trajectory.
+    vector<Eigen::Vector3d> pts;
+    vector<double> yaws;
+    double yp, yv, ya;
+    Eigen::Vector3d cur_p = TrajOpt_.traj.getPos(0.0);
+    YawP_.GetCmd(0.0, yp, yv, ya);
+    double cur_unwrap = yp;
+    pts.emplace_back(cur_p);
+    yaws.emplace_back(cur_unwrap);
+
+    Eigen::Vector3d prev_p = cur_p;
+    double prev_unwrap = cur_unwrap;
+    double seg_l_acc = 0.0, seg_y_acc = 0.0;
+    for(double t = samp_dt; t < total_dur; t += samp_dt){
+        cur_p = TrajOpt_.traj.getPos(t);
+        YawP_.GetCmd(t, yp, yv, ya);
+        cur_unwrap = prev_unwrap + YawP_.Dyaw(yp, YawP_.Normyaw(prev_unwrap));
+
+        seg_l_acc += (cur_p - prev_p).norm();
+        seg_y_acc += fabs(cur_unwrap - prev_unwrap);
+        prev_p = cur_p;
+        prev_unwrap = cur_unwrap;
+
+        if(seg_l_acc >= min_seg_l || seg_y_acc >= min_seg_y){
+            pts.emplace_back(cur_p);
+            yaws.emplace_back(cur_unwrap);
+            seg_l_acc = 0.0;
+            seg_y_acc = 0.0;
+        }
+    }
+    cur_p = TrajOpt_.traj.getPos(total_dur);
+    YawP_.GetCmd(total_dur, yp, yv, ya);
+    cur_unwrap = prev_unwrap + YawP_.Dyaw(yp, YawP_.Normyaw(prev_unwrap));
+    if((cur_p - pts.back()).norm() > 1e-4 || fabs(cur_unwrap - yaws.back()) > 1e-4){
+        pts.emplace_back(cur_p);
+        yaws.emplace_back(cur_unwrap);
+    }
+
+    const int n = int(pts.size());
+    if(n < 2) return;
+
+    // 2a) Position timeline: each segment at exactly max_v (constant speed).
+    Trajectory<5> reg_traj;
+    double T_pos = 0.0;
+    for(int k = 0; k < n - 1; k++){
+        Eigen::Vector3d dp = pts[k + 1] - pts[k];
+        double dur = std::max(dp.norm() / max_v, min_dur);
+        Piece<5>::CoefficientMat cM;   // descending power: col(5)=const, col(4)=linear
+        cM.setZero();
+        cM.col(5) = pts[k];
+        cM.col(4) = dp / dur;
+        reg_traj.emplace_back(dur, cM);
+        T_pos += dur;
+    }
+
+    // 2b) Yaw timeline: each segment at exactly max_w (constant yaw rate).
+    vector<double> yaw_start, yaw_rate, yaw_dur;
+    double T_yaw = 0.0;
+    for(int k = 0; k < n - 1; k++){
+        double dyaw = yaws[k + 1] - yaws[k];
+        double dur = std::max(fabs(dyaw) / max_w, min_dur);
+        yaw_start.emplace_back(yaws[k]);
+        yaw_rate.emplace_back(dyaw / dur);
+        yaw_dur.emplace_back(dur);
+        T_yaw += dur;
+    }
+
+    // 3) Pad the shorter DOF with a constant (hold) piece so both finish at T.
+    const double T = std::max(T_pos, T_yaw);
+    if(T - T_pos > min_dur){
+        Piece<5>::CoefficientMat cM;
+        cM.setZero();
+        cM.col(5) = pts.back();   // hold final position, zero velocity
+        reg_traj.emplace_back(T - T_pos, cM);
+    }
+    if(T - T_yaw > min_dur){
+        yaw_start.emplace_back(yaws.back());   // hold final yaw, zero rate
+        yaw_rate.emplace_back(0.0);
+        yaw_dur.emplace_back(T - T_yaw);
+    }
+
+    // 4) Assemble the yaw planner (6 ascending-power coeffs per piece: a0 + a1*t + ...).
+    const int my = int(yaw_dur.size());
+    Eigen::VectorXd A(6 * my), Tv(my);
+    A.setZero();
+    for(int k = 0; k < my; k++){
+        A(6 * k + 0) = yaw_start[k];
+        A(6 * k + 1) = yaw_rate[k];
+        Tv(k) = yaw_dur[k];
+    }
+
+    // 5) Commit in place.
+    TrajOpt_.traj = reg_traj;
+    YawP_.A_ = A;
+    YawP_.T_ = Tv;
 }
 
 void Murder::PublishSparseWaypoints(const vector<Eigen::Vector3d> &path,

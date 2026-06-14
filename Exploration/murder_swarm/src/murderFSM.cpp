@@ -156,16 +156,19 @@ void MurderFSM::FSMCallback(const ros::TimerEvent &e){
             else{
                 int rp = M_planner_.SwitchMode();
                 if(rp == 1){ // local plan again
+                    ROS_INFO("id:%d local plan again", M_planner_.SDM_.self_id_);
                     M_planner_.SetPlanInterval(0.3);
                     M_planner_.GVP_.LocalExplorableDebug();
                     break;
                 }
                 else if(rp == 2){ // global plan
+                    ROS_INFO("id:%d global plan", M_planner_.SDM_.self_id_);
                     ChangeState(M_State::GLOBALPLAN);
                     M_planner_.SetPlanInterval(0.009);
                     break;
                 }
                 else{
+                    ROS_INFO("id:%d finish", M_planner_.SDM_.self_id_);
                     ChangeState(M_State::FINISH);
                     // for(int i = 0; i < 10; i++) ROS_ERROR("finish2");
                     M_planner_.SetPlanInterval(0.009);

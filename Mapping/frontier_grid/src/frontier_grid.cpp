@@ -243,53 +243,167 @@ bool FrontierGrid::SampleVps(list<int> &idxs){
         f_grid_[idx].last_sample_ = cur_t;
 
         list<uint8_t> dieing_vps; // for swarm
-        
+
+        // ---- Per-frontier debug counters (why each VP slot was not accepted) ----
+        // Mutually exclusive buckets per slot. Buckets sum to (samp_h_dir_num_ * samp_dir_num_ * samp_dist_num_).
+        int n_total_slots          = 0;  // total slots iterated
+        int n_no_pose              = 0;  // GetVp(idx, vp_id, ...) returned false
+        int n_already_dead         = 0;  // local_vps_[vp_id] == 2 entering this round
+        int n_rej_out_of_map       = 0;  // !InsideMap(vp_pos)
+        int n_rej_block_or_cell_null = 0; // InsideMap=true but GetNode(pos) == NULL (block null OR cell null inside an allocated block)
+        int n_rej_xnode_or_outnode = 0;  // GetNode(pos) non-NULL but IsFeasible still false (Xnode or Outnode_ sentinel)
+        int n_rej_strange          = 0;  // StrangePoint(pos) was the reason
+        int n_killed_bbx           = 0;  // LRM-rejected and BBX occupied -> killed
+        int n_killed_strange       = 0;  // LRM-rejected and strange -> killed (no BBX hit)
+        int n_skipped_no_kill      = 0;  // LRM-rejected but BBX free & not strange -> deferred (state stays 0)
+        int n_killed_gain          = 0;  // gain < vp_thresh_ -> killed
+        int n_accepted             = 0;  // passed everything; local_vps_[vp_id] := 1
+        int n_accepted_local_feas  = 0;  // accepted and IsLocalFeasible -> contributed to `flag`
+        bool show_pushed_this_frontier = false;  // true if exploring_frontiers_show_ got `idx` pushed in this call
+
         for(int h_id = 0; h_id < samp_h_dir_num_; h_id++){
             for(int dir_id = 0; dir_id < samp_dir_num_; dir_id++){
                 for(int l_id = 0; l_id < samp_dist_num_; l_id++){
+                    n_total_slots++;
                     vp_id = (h_id * samp_dir_num_ + dir_id) * samp_dist_num_ + l_id;
-                    if(!GetVp(idx, vp_id, vp_pose) ||  f_grid_[idx].local_vps_[vp_id] == 2) continue;
-                    vp_pos = vp_pose.block(0,0,3,1);
-                    if(!LRM_->IsFeasible(vp_pos) || !LRM_->InsideMap(vp_pos) || LRM_->StrangePoint(vp_pos)){
-                        if(BM_->PosBBXOccupied(vp_pos, Robot_size_) || LRM_->StrangePoint(vp_pos) ){
-                            dieing_vps.push_back(vp_id);
-                            f_grid_[idx].local_vps_[vp_id] = 2;
-                        }
+
+                    if(!GetVp(idx, vp_id, vp_pose)){
+                        n_no_pose++;
                         continue;
                     }
-                    if(GetGain(idx, vp_id) < vp_thresh_) {
+                    if(f_grid_[idx].local_vps_[vp_id] == 2){
+                        n_already_dead++;
+                        continue;
+                    }
+                    vp_pos = vp_pose.block(0,0,3,1);
+
+                    bool inside_map = LRM_->InsideMap(vp_pos);
+                    bool strange    = LRM_->StrangePoint(vp_pos);
+                    bool feasible   = LRM_->IsFeasible(vp_pos);
+
+                    if(!feasible || !inside_map || strange){
+                        // Categorize the LRM-rejection reason (mutually exclusive, in priority order)
+                        const char* reason = "?";
+                        if(!inside_map){
+                            n_rej_out_of_map++;
+                            reason = "out_of_map";
+                        }
+                        else if(strange){
+                            n_rej_strange++;
+                            reason = "strange_point";
+                        }
+                        else{
+                            // inside map, not strange, but IsFeasible=false: inspect LR_node
+                            shared_ptr<lowres::LR_node> node = LRM_->GetNode(vp_pos);
+                            if(node == NULL){
+                                n_rej_block_or_cell_null++;
+                                reason = "lr_block_or_cell_null";
+                            }
+                            else{
+                                n_rej_xnode_or_outnode++;
+                                reason = "xnode_or_outnode";
+                            }
+                        }
+
+                        bool bbx_occ = BM_->PosBBXOccupied(vp_pos, Robot_size_);
+                        bool killed  = false;
+                        if(bbx_occ){
+                            n_killed_bbx++;
+                            killed = true;
+                            dieing_vps.push_back(vp_id);
+                            f_grid_[idx].local_vps_[vp_id] = 2;
+                        } else if(strange){
+                            n_killed_strange++;
+                            killed = true;
+                            dieing_vps.push_back(vp_id);
+                            f_grid_[idx].local_vps_[vp_id] = 2;
+                        } else {
+                            n_skipped_no_kill++;
+                        }
+
+                        ROS_INFO("[SampleVps] id=%d f=%d vp=%d pos=(%.2f %.2f %.2f) lrm_reject=%s "
+                            "inside_map=%d strange=%d feasible=%d bbx_occ=%d -> %s",
+                            int(SDM_->self_id_), idx, vp_id, vp_pos(0), vp_pos(1), vp_pos(2),
+                            reason, inside_map, strange, feasible, bbx_occ,
+                            killed ? "KILLED" : "DEFERRED");
+                        continue;
+                    }
+
+                    // Past the LRM gate -> compute gain
+                    double g = GetGain(idx, vp_id);
+                    if(g < vp_thresh_){
+                        n_killed_gain++;
                         dieing_vps.push_back(vp_id);
                         f_grid_[idx].local_vps_[vp_id] = 2;
                         if(!f_grid_[idx].flags_[2]){
                             f_grid_[idx].flags_.set(2);
                             exploring_frontiers_show_.emplace_back(idx);
+                            show_pushed_this_frontier = true;
                         }
+                        ROS_INFO("[SampleVps] id=%d f=%d vp=%d pos=(%.2f %.2f %.2f) gain=%.3f < thresh=%.3f -> KILLED",
+                            int(SDM_->self_id_), idx, vp_id, vp_pos(0), vp_pos(1), vp_pos(2), g, vp_thresh_);
                     }
                     else{
-                        if(LRM_->IsLocalFeasible(vp_pos)) flag = true;
+                        bool lf = LRM_->IsLocalFeasible(vp_pos);
+                        if(lf){
+                            flag = true;
+                            n_accepted_local_feas++;
+                        }
+                        n_accepted++;
                         f_grid_[idx].local_vps_[vp_id] = 1;
                         if(!f_grid_[idx].flags_[2]){
                             f_grid_[idx].flags_.set(2);
                             exploring_frontiers_show_.emplace_back(idx);
+                            show_pushed_this_frontier = true;
                         }
+                        ROS_INFO("[SampleVps] id=%d f=%d vp=%d pos=(%.2f %.2f %.2f) gain=%.3f local_feasible=%d -> ACCEPTED",
+                            int(SDM_->self_id_), idx, vp_id, vp_pos(0), vp_pos(1), vp_pos(2), g, lf);
                     }
                 }
             }
         }
-        ROS_INFO("[FrontierGrid::SampleVps] dieing vp num:%d", dieing_vps.size());
+
+        // Recompute alive VPs (for the min_vp_num_ death check below)
         int alive_num = 0;
         for(int h_id = 0; h_id < samp_num_; h_id++){
             if(f_grid_[idx].local_vps_[h_id] != 2){
                 alive_num++;
             }
         }
-        ROS_INFO("[FrontierGrid::SampleVps] alive vp num:%d, min vp num:%d", alive_num, min_vp_num_);
+
+        // ---- Per-frontier rejection breakdown ----
+        // `show_pushed_this_frontier` tells you whether `idx` was emplaced into
+        // `exploring_frontiers_show_` in THIS call. A frontier is NOT pushed only
+        // when zero VPs reached the gain test (i.e. every VP was rejected at the
+        // LRM gate or was already dead before this round).
+        ROS_INFO(
+            "[SampleVps] id=%d f=%d slots=%d  no_pose=%d already_dead=%d  "
+            "LRM_reject{out_of_map=%d block_or_cell_null=%d xnode_or_outnode=%d strange=%d}  "
+            "post_LRM{killed_bbx=%d killed_strange=%d deferred=%d killed_gain=%d}  "
+            "accepted=%d(local_feas=%d)  alive=%d/min=%d  show_pushed=%d  dieing=%zu",
+            int(SDM_->self_id_), idx, n_total_slots,
+            n_no_pose, n_already_dead,
+            n_rej_out_of_map, n_rej_block_or_cell_null, n_rej_xnode_or_outnode, n_rej_strange,
+            n_killed_bbx, n_killed_strange, n_skipped_no_kill, n_killed_gain,
+            n_accepted, n_accepted_local_feas,
+            alive_num, min_vp_num_,
+            int(show_pushed_this_frontier),
+            dieing_vps.size());
+
         if(alive_num < min_vp_num_){
             f_grid_[idx].f_state_ = 2;
             if(!f_grid_[idx].flags_[2]){
                 explored_frontiers_show_.push_back(idx);
                 f_grid_[idx].flags_.set(2);
             }
+            ROS_WARN(
+                "[SampleVps] id=%d f=%d MARKED DEAD (f_state_=2) alive=%d < min=%d  "
+                "(LRM_reject_total=%d, post_LRM_killed_total=%d, gain_killed=%d, accepted_this_round=%d)",
+                int(SDM_->self_id_), idx, alive_num, min_vp_num_,
+                n_rej_out_of_map + n_rej_block_or_cell_null + n_rej_xnode_or_outnode + n_rej_strange,
+                n_killed_bbx + n_killed_strange,
+                n_killed_gain,
+                n_accepted);
             if(use_swarm_&& !SDM_->is_ground_) {
                 SDM_->SetDTGFn(idx, f_grid_[idx].local_vps_, 1, false); 
                 BM_->SendSwarmBlockMap(idx, false);

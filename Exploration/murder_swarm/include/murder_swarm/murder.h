@@ -131,6 +131,14 @@ private:
             const double &yde, const double &ydde, const Eigen::Vector3d &gazept,bool gaze = false);
     void GetFollowPath(list<Eigen::Vector3d> &path, list<Eigen::Vector3d> &path_follow);
     void PublishTraj(bool recover);
+    /**
+     * @brief Re-time TrajOpt_.traj / YawP_ in place for the UAV simulator (dynamics ignored).
+     * Position is re-timed to move at exactly opt/MaxVel and yaw at exactly opt/YawVel, on
+     * independent timelines; the shorter DOF is padded with a hold piece so both share one
+     * total duration. Mutates the canonical TrajOpt_.traj / YawP_ so all downstream users
+     * (replan handoff, traj_end_t_/replan_t_, PublishTraj, swarm SetTraj) stay consistent.
+     */
+    void RegulateUavTraj();
     void PublishSparseWaypoints(const vector<Eigen::Vector3d> &path, const Eigen::Vector3d &end_pos, double end_yaw);
     bool SwarmFeasiCheck();
     void Debug(const Eigen::Vector3d &pt1, const Eigen::Vector3d &pt2);

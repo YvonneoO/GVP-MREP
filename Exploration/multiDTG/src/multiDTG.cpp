@@ -216,11 +216,42 @@ void MultiDTG::Update(const Eigen::Matrix4d &robot_pose, bool clear_x){
         for(auto &f : F_list_temp){
             int idx = f->id_;
             if(f->cf_->f_state_ == 2){
+                // [HF_GONE] site #1: frontier already explored -> EraseFnode -> EraseEdge(hf)
+                bool had_hf = (f->hf_edge_ != NULL);
+                int hf_head = had_hf ? int(f->hf_edge_->head_) : -1;
+                int hf_tail = had_hf ? int(f->hf_edge_->tail_) : -1;
+                bool was_global = had_hf && (f->hf_edge_->e_flag_ & 16);
+                Eigen::Vector3d h_pos = (had_hf && f->hf_edge_->head_n_ != NULL)
+                                          ? f->hf_edge_->head_n_->pos_ : Eigen::Vector3d::Zero();
+                Eigen::Vector3d f_pos = f->center_;
                 EraseFnode(f->center_, f->id_);
+                if(had_hf){
+                    ROS_INFO("[HF_GONE] id=%d site=1(Update:f_state==2) f=%d hf(head=%d@(%.2f,%.2f,%.2f) tail=%d@(%.2f,%.2f,%.2f) global=%d) -> EraseEdge",
+                        int(SDM_->self_id_), f->id_,
+                        hf_head, h_pos.x(), h_pos.y(), h_pos.z(),
+                        hf_tail, f_pos.x(), f_pos.y(), f_pos.z(),
+                        was_global);
+                }
             }
             else if(f->vp_id_ != -1 && f->cf_->local_vps_[f->vp_id_] != 1){
+                // [HF_GONE] site #2: bound VP no longer alive -> EraseEdge(hf) (F node stays)
+                bool had_hf = (f->hf_edge_ != NULL);
+                int hf_head = had_hf ? int(f->hf_edge_->head_) : -1;
+                int hf_tail = had_hf ? int(f->hf_edge_->tail_) : -1;
+                bool was_global = had_hf && (f->hf_edge_->e_flag_ & 16);
+                Eigen::Vector3d h_pos = (had_hf && f->hf_edge_->head_n_ != NULL)
+                                          ? f->hf_edge_->head_n_->pos_ : Eigen::Vector3d::Zero();
+                Eigen::Vector3d f_pos = f->center_;
+                int bound_vp = f->vp_id_;
+                int bound_vp_state = (bound_vp >= 0 && bound_vp < int(f->cf_->local_vps_.size()))
+                                     ? int(f->cf_->local_vps_[bound_vp]) : -1;
                 // BlockEdge(f->hf_edge_);
                 EraseEdge(f->hf_edge_);
+                ROS_INFO("[HF_GONE] id=%d site=2(Update:vp_dead) f=%d bound_vp=%d vp_state=%d hf(head=%d@(%.2f,%.2f,%.2f) tail=%d@(%.2f,%.2f,%.2f) global=%d) -> EraseEdge",
+                    int(SDM_->self_id_), f->id_, bound_vp, bound_vp_state,
+                    hf_head, h_pos.x(), h_pos.y(), h_pos.z(),
+                    hf_tail, f_pos.x(), f_pos.y(), f_pos.z(),
+                    was_global);
             }
         }
     }
@@ -325,8 +356,16 @@ void MultiDTG::Update(const Eigen::Matrix4d &robot_pose, bool clear_x){
                         hfe_free_list.emplace_back(e);
                     }
                     else{
-                        // ROS_WARN("id:%d clear edge2", SDM_->self_id_);
-                        // cout<<"h:"<<e->head_<<"  t:"<<e->tail_<<"PN:"<<e->path_.size()<<endl;
+                        // [HF_GONE] site #3 trigger: PathCheck failed during LRM_->h_id_clear_ sweep.
+                        // The edge will be BlockEdge'd below (loses bit 4 and length_ blown out).
+                        bool was_global = (e->e_flag_ & 16);
+                        Eigen::Vector3d h_pos = (e->head_n_ != NULL) ? e->head_n_->pos_ : Eigen::Vector3d::Zero();
+                        Eigen::Vector3d f_pos = (e->tail_n_ != NULL) ? e->tail_n_->center_ : Eigen::Vector3d::Zero();
+                        ROS_INFO("[HF_GONE] id=%d site=3(Update:PathCheck_fail) hid=%d hf(head=%d@(%.2f,%.2f,%.2f) tail=%d@(%.2f,%.2f,%.2f) global=%d) path_len=%zu -> queued for BlockEdge",
+                            int(SDM_->self_id_), int(hid),
+                            int(e->head_), h_pos.x(), h_pos.y(), h_pos.z(),
+                            int(e->tail_), f_pos.x(), f_pos.y(), f_pos.z(),
+                            was_global, e->path_.size());
                         hfe_occ_list.emplace_back(e);
                     }
                 }
@@ -344,6 +383,10 @@ void MultiDTG::Update(const Eigen::Matrix4d &robot_pose, bool clear_x){
     for(auto &e : hfe_free_list) e->e_flag_ &= 254;
     for(auto &e : hhe_occ_list) BlockEdge(e);
     for(auto &e : hfe_occ_list) BlockEdge(e);
+    if(!hfe_occ_list.empty() || !hhe_occ_list.empty()){
+        ROS_INFO("[HF_GONE] id=%d site=3_summary BlockEdge swept: hhe_occ=%zu hfe_occ=%zu (from h_id_clear_ size=%zu)",
+            int(SDM_->self_id_), hhe_occ_list.size(), hfe_occ_list.size(), LRM_->h_id_clear_.size());
+    }
     // for(auto &e : hhe_occ_list) EraseEdge(e);
     // for(auto &e : hfe_occ_list) EraseEdge(e);
 
@@ -475,7 +518,20 @@ void MultiDTG::RemoveVp(const Eigen::Vector3d &center, int const &f_id, int cons
                 break;
             }
         }
+        // [HF_GONE] site #4: killed VP was the one bound to the HF -> BlockEdge (soft; rebind attempted below)
+        bool had_hf = (fn->hf_edge_ != NULL);
+        int hf_head = had_hf ? int(fn->hf_edge_->head_) : -1;
+        int hf_tail = had_hf ? int(fn->hf_edge_->tail_) : -1;
+        bool was_global = had_hf && (fn->hf_edge_->e_flag_ & 16);
+        Eigen::Vector3d h_pos = (had_hf && fn->hf_edge_->head_n_ != NULL)
+                                  ? fn->hf_edge_->head_n_->pos_ : Eigen::Vector3d::Zero();
+        Eigen::Vector3d f_pos = fn->center_;
         BlockEdge(fn->hf_edge_);
+        ROS_INFO("[HF_GONE] id=%d site=4(RemoveVp:bound_vp) f=%d killed_vp=%d hf(head=%d@(%.2f,%.2f,%.2f) tail=%d@(%.2f,%.2f,%.2f) global=%d) broadcast=%d -> BlockEdge (will try ConnectHF rebind)",
+            int(SDM_->self_id_), f_id, v_id,
+            hf_head, h_pos.x(), h_pos.y(), h_pos.z(),
+            hf_tail, f_pos.x(), f_pos.y(), f_pos.z(),
+            was_global, int(broad_cast));
     }
     else return;
 
@@ -610,14 +666,29 @@ void MultiDTG::DTGCommunicationCallback(const ros::TimerEvent &e){
 
                 }
                 else{
+                    // [HF_GONE] site #5: swarm peer says this frontier is dead (alive=false).
+                    // FG_->SetExplored flips f_state_ to 2; EraseFnode then removes the HF.
                     // cout<<"kill:"<<int(f_msg.f_id)<<endl;
                     if(f_msg.need_help){
                         BM_->SendSwarmBlockMap(f_msg.f_id, false);
                     }
                     FG_->SetExplored(f_msg.f_id);
+                    bool had_hf = (F_depot_[f_msg.f_id]->hf_edge_ != NULL);
+                    int hf_head = had_hf ? int(F_depot_[f_msg.f_id]->hf_edge_->head_) : -1;
+                    int hf_tail = had_hf ? int(F_depot_[f_msg.f_id]->hf_edge_->tail_) : -1;
+                    bool was_global = had_hf && (F_depot_[f_msg.f_id]->hf_edge_->e_flag_ & 16);
+                    Eigen::Vector3d h_pos = (had_hf && F_depot_[f_msg.f_id]->hf_edge_->head_n_ != NULL)
+                                              ? F_depot_[f_msg.f_id]->hf_edge_->head_n_->pos_
+                                              : Eigen::Vector3d::Zero();
+                    Eigen::Vector3d f_pos = F_depot_[f_msg.f_id]->cf_->center_;
                     // debug_pts_.emplace_back(F_depot_[f_msg.f_id]->cf_->center_);
                     // Debug(debug_pts_);
                     EraseFnode(F_depot_[f_msg.f_id]->cf_->center_, f_msg.f_id);
+                    ROS_INFO("[HF_GONE] id=%d site=5(SwarmCB:alive=false) f=%d hf(head=%d@(%.2f,%.2f,%.2f) tail=%d@(%.2f,%.2f,%.2f) global=%d) -> EraseEdge",
+                        int(SDM_->self_id_), int(f_msg.f_id),
+                        hf_head, h_pos.x(), h_pos.y(), h_pos.z(),
+                        hf_tail, f_pos.x(), f_pos.y(), f_pos.z(),
+                        was_global);
                 }
             }
         }
@@ -858,38 +929,25 @@ void MultiDTG::Show(){
     mka.markers[3].color.r = 0.7;
     mka.markers[3].color.g = 0.5;
     mka.markers[3].color.b = 0.2;
-    // cout<<"debug show"<<endl;
-    // tr1::unordered_map<int, int> debug_dict;
-    for(auto &e : hf_e_list){
-        // if(debug_dict.find(e->tail_) == debug_dict.end())
-        //     debug_dict.insert({e->tail_, e->tail_});
-        // else {
-        //     ROS_ERROR("id:%d dup edge fn:%d", SDM_->self_id_, e->tail_);
-        //     ros::shutdown();
-        //     return;
-        // }
-        if(!(e->e_flag_ & 16)) continue;
-        // cout<<"h:"<<e->head_<<" f:"<<e->tail_<<endl;
-        // e->flag_ &= 253;
 
+    // Per-vertex colors so RViz can show explorable HF edges separately from stale ones.
+    // - dim_color : default mustard, used when tail frontier is no longer f_state_ == 1
+    // - hot_color : bright lime, used when tail frontier is still exploring (f_state_ == 1)
+    std_msgs::ColorRGBA dim_color;
+    dim_color.r = 0.7f; dim_color.g = 0.5f; dim_color.b = 0.2f; dim_color.a = 0.2f;
+    std_msgs::ColorRGBA hot_color;
+    hot_color.r = 0.1f; hot_color.g = 1.0f; hot_color.b = 0.1f; hot_color.a = 1.0f;
+    int hf_total = 0, hf_explorable = 0;
+    for(auto &e : hf_e_list){
+        if(!(e->e_flag_ & 16)) continue;
+        hf_total++;
+
+        bool active = (e->tail_n_ != nullptr) && (e->tail_n_->cf_ != nullptr)
+                      && (e->tail_n_->cf_->f_state_ == 1);
+        if(active) hf_explorable++;
+        const std_msgs::ColorRGBA &c = active ? hot_color : dim_color;
 
         if(show_e_details_){
-            // if(e->path_.size() <= 1) continue;
-            // for(list<Eigen::Vector3d>::iterator p_it = e->path_.begin(); p_it != e->path_.end(); p_it++){
-            //     p1.x = p_it->x();
-            //     p1.y = p_it->y();
-            //     p1.z = p_it->z();
-            //     p_it++;
-            //     p2.x = p_it->x();
-            //     p2.y = p_it->y();
-            //     p2.z = p_it->z();
-            //     p_it--;
-            //     mka.markers[3].points.emplace_back(p1);
-            //     mka.markers[3].points.emplace_back(p2);
-            // }
-            // p1.x = e->path_.back().x();
-            // p1.y = e->path_.back().y();
-            // p1.z = e->path_.back().z();
             p1.x = e->path_.front().x();
             p1.y = e->path_.front().y();
             p1.z = e->path_.front().z();
@@ -898,6 +956,8 @@ void MultiDTG::Show(){
             p2.z = e->tail_n_->center_.z();
             mka.markers[3].points.emplace_back(p1);
             mka.markers[3].points.emplace_back(p2);
+            mka.markers[3].colors.emplace_back(c);
+            mka.markers[3].colors.emplace_back(c);
         }
         else{
             p1.x = e->path_.front().x();
@@ -910,10 +970,12 @@ void MultiDTG::Show(){
 
             mka.markers[3].points.emplace_back(p1);
             mka.markers[3].points.emplace_back(p2);
-
+            mka.markers[3].colors.emplace_back(c);
+            mka.markers[3].colors.emplace_back(c);
         }
-
     }
+    ROS_INFO_THROTTLE(1.0, "[MultiDTG::Show] id=%d HF edges: total=%d explorable(f_state_==1)=%d",
+                      int(SDM_->self_id_), hf_total, hf_explorable);
 
     mka.markers[4].header.frame_id = "world";
     mka.markers[4].header.stamp = ros::Time::now();
