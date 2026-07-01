@@ -79,6 +79,7 @@ void Murder::init(const ros::NodeHandle &nh, const ros::NodeHandle &nh_private){
 
     last_map_update_t_ = ros::WallTime::now().toSec();
     traj_end_t_ = last_map_update_t_ - 0.1;
+    traj_sim_start_ = ros::Time::now().toSec();
     have_odom_ = false;
     target_f_id_ = -1;
     target_v_id_ = -1;
@@ -157,6 +158,7 @@ bool Murder::GoHome(){
     double ys, yds, ydds, ye, yde, ydde;
     double hand_t = ros::WallTime::now().toSec() + reach_out_t_; 
     double cur_t = ros::WallTime::now().toSec();
+    double hand_sim = ros::Time::now().toSec();   // sim-time anchor of the new traj's t=0
     if(hand_t > traj_end_t_){
         hand_t = cur_t;
         ps = p_;
@@ -171,20 +173,29 @@ bool Murder::GoHome(){
         ydde = 0;
     }
     else{
-        ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+        double dur = TrajOpt_.traj.getTotalDuration();
+        double tau = (ros::Time::now().toSec() + reach_out_t_) - traj_sim_start_;  // sim elapsed into active traj
+        if(tau > dur - 1e-4) tau = dur - 1e-4;
+        if(tau < 0) tau = 0;
+        ps = TrajOpt_.traj.getPos(tau);
         while(!LRM_.IsFeasible(ps) && hand_t > cur_t){
             hand_t -= reach_out_t_ / 10;
-            ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+            tau = max(0.0, tau - reach_out_t_ / 10);
+            ps = TrajOpt_.traj.getPos(tau);
         }
         if(!LRM_.IsFeasible(ps)){
             hand_t = cur_t;
             ps = p_;
+            hand_sim = ros::Time::now().toSec();
         }
-        vs = TrajOpt_.traj.getVel(hand_t - traj_start_t_);
-        as = TrajOpt_.traj.getAcc(hand_t - traj_start_t_);
+        else{
+            hand_sim = traj_sim_start_ + tau;  // sim instant the active traj reaches the handoff
+        }
+        vs = TrajOpt_.traj.getVel(tau);
+        as = TrajOpt_.traj.getAcc(tau);
         ve.setZero();
         ae.setZero();
-        YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        YawP_.GetCmd(tau, ys, yds, ydds);
         yde = 0; 
         ydde = 0;
     }
@@ -193,6 +204,7 @@ bool Murder::GoHome(){
     if(TrajPlanB(ps, vs, as, pe, ve, 
                 ae, ys, yds, ydds, target_(3), yde, ydde, home_p_ + Eigen::Vector3d(1.0, 0, 0), hand_t)){
         traj_start_t_ = hand_t;
+        traj_sim_start_ = hand_sim;
         traj_end_t_ = TrajOpt_.traj.getTotalDuration() + traj_start_t_;
         replan_t_ = min(replan_duration_, TrajOpt_.traj.getTotalDuration()) + traj_start_t_;
         target_f_id_ = -2;
@@ -209,6 +221,7 @@ bool Murder::LocalPlan(){
     double ys, yds, ydds, ye, yde, ydde;
     double hand_t = ros::WallTime::now().toSec() + reach_out_t_; 
     double cur_t = ros::WallTime::now().toSec();
+    double hand_sim = ros::Time::now().toSec();   // sim-time anchor of the new traj's t=0
 
     /* get start status */
     if(hand_t > traj_end_t_){
@@ -218,7 +231,7 @@ bool Murder::LocalPlan(){
         as.setZero();
         ve.setZero();
         ae.setZero();
-        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_sim - traj_sim_start_, ys, yds, ydds);
         else ys = yaw_;
         yds = yaw_v_;
         ydds = 0;
@@ -226,20 +239,29 @@ bool Murder::LocalPlan(){
         ydde = 0;
     }
     else{
-        ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+        double dur = TrajOpt_.traj.getTotalDuration();
+        double tau = (ros::Time::now().toSec() + reach_out_t_) - traj_sim_start_;  // sim elapsed into active traj
+        if(tau > dur - 1e-4) tau = dur - 1e-4;
+        if(tau < 0) tau = 0;
+        ps = TrajOpt_.traj.getPos(tau);
         while(!LRM_.IsFeasible(ps) && hand_t > cur_t){
             hand_t -= reach_out_t_ / 10;
-            ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+            tau = max(0.0, tau - reach_out_t_ / 10);
+            ps = TrajOpt_.traj.getPos(tau);
         }
         if(!LRM_.IsFeasible(ps)){
             hand_t = cur_t;
             ps = p_;
+            hand_sim = ros::Time::now().toSec();
         }
-        vs = TrajOpt_.traj.getVel(hand_t - traj_start_t_);
-        as = TrajOpt_.traj.getAcc(hand_t - traj_start_t_);
+        else{
+            hand_sim = traj_sim_start_ + tau;  // sim instant the active traj reaches the handoff
+        }
+        vs = TrajOpt_.traj.getVel(tau);
+        as = TrajOpt_.traj.getAcc(tau);
         ve.setZero();
         ae.setZero();
-        YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        YawP_.GetCmd(tau, ys, yds, ydds);
         yde = 0; 
         ydde = 0;
     }
@@ -379,6 +401,7 @@ bool Murder::LocalPlan(){
         target_f_id_ = f_v.first;
         target_v_id_ = f_v.second;
         traj_start_t_ = hand_t;
+        traj_sim_start_ = hand_sim;
         traj_end_t_ = TrajOpt_.traj.getTotalDuration() + traj_start_t_;
         replan_t_ = min(replan_duration_, TrajOpt_.traj.getTotalDuration()) + traj_start_t_;
         // cout<<"plan success1!"<<" s:"<<ps.transpose()<<"  e:"<<pe.transpose()<<" tar:"<<target_vp_pose_.transpose()<<" rt:"<<replan_t_ - traj_start_t_<<
@@ -410,6 +433,7 @@ bool Murder::GlobalPlan(){
     double ys, yds, ydds, ye, yde, ydde;
     double hand_t = ros::WallTime::now().toSec() + reach_out_t_; 
     double cur_t = ros::WallTime::now().toSec();
+    double hand_sim = ros::Time::now().toSec();   // sim-time anchor of the new traj's t=0
     if(hand_t > traj_end_t_){
         hand_t = ros::WallTime::now().toSec();
         ps = p_;
@@ -417,7 +441,7 @@ bool Murder::GlobalPlan(){
         as.setZero();
         ve.setZero();
         ae.setZero();
-        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_sim - traj_sim_start_, ys, yds, ydds);
         else ys = yaw_;        // ys = yaw_;
         yds = yaw_v_;
         ydds = 0;
@@ -425,20 +449,29 @@ bool Murder::GlobalPlan(){
         ydde = 0;
     }
     else{
-        ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+        double dur = TrajOpt_.traj.getTotalDuration();
+        double tau = (ros::Time::now().toSec() + reach_out_t_) - traj_sim_start_;  // sim elapsed into active traj
+        if(tau > dur - 1e-4) tau = dur - 1e-4;
+        if(tau < 0) tau = 0;
+        ps = TrajOpt_.traj.getPos(tau);
         while(!LRM_.IsFeasible(ps) && hand_t > cur_t){
             hand_t -= reach_out_t_ / 10;
-            ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+            tau = max(0.0, tau - reach_out_t_ / 10);
+            ps = TrajOpt_.traj.getPos(tau);
         }
         if(!LRM_.IsFeasible(ps)){
             hand_t = cur_t;
             ps = p_;
+            hand_sim = ros::Time::now().toSec();
         }
-        vs = TrajOpt_.traj.getVel(hand_t - traj_start_t_);
-        as = TrajOpt_.traj.getAcc(hand_t - traj_start_t_);
+        else{
+            hand_sim = traj_sim_start_ + tau;  // sim instant the active traj reaches the handoff
+        }
+        vs = TrajOpt_.traj.getVel(tau);
+        as = TrajOpt_.traj.getAcc(tau);
         ve.setZero();
         ae.setZero();
-        YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        YawP_.GetCmd(tau, ys, yds, ydds);
         yde = 0; 
         ydde = 0;
     }
@@ -573,6 +606,7 @@ bool Murder::GlobalPlan(){
         target_f_id_ = f_v.first;
         target_v_id_ = f_v.second;
         traj_start_t_ = hand_t;
+        traj_sim_start_ = hand_sim;
         traj_end_t_ = TrajOpt_.traj.getTotalDuration() + traj_start_t_;
         replan_t_ = min(replan_duration_ * 3.0, TrajOpt_.traj.getTotalDuration()) + traj_start_t_;
         // cout<<"plan success2!"<<" s:"<<ps.transpose()<<"  e:"<<pe.transpose()<<" tar:"<<target_vp_pose_.transpose()<<" rt:"<<replan_t_ - traj_start_t_<<
@@ -641,12 +675,14 @@ bool Murder::GlobalPlan(){
 }
 
 bool Murder::TrajCheck(){
-    double cur_t = max(ros::WallTime::now().toSec(), traj_start_t_);
+    // Cadence gate stays on wall time (replan_t_ is wall).
+    if(max(ros::WallTime::now().toSec(), traj_start_t_) > replan_t_ - 1e-3) return false;
 
-    if(cur_t > replan_t_ - 1e-3) return false;
-
-    double end_t = min(check_duration_, traj_end_t_ - 1e-3 - cur_t);
-    cur_t = cur_t - traj_start_t_;
+    // Trajectory parametrization (which segment to collision-check) uses sim time,
+    // matching where the robot actually is along the traj during execution.
+    double cur_t = max(ros::Time::now().toSec(), traj_sim_start_);
+    double end_t = min(check_duration_, (traj_sim_start_ + TrajOpt_.traj.getTotalDuration()) - 1e-3 - cur_t);
+    cur_t = cur_t - traj_sim_start_;
     Eigen::Vector3d last_p = TrajOpt_.traj.getPos(cur_t);
     Eigen::Vector3d p, r_size;
     r_size = LRM_.GetRobotSize() * 0.8;
@@ -779,13 +815,14 @@ int Murder::Replan(const bool &new_target, const bool &ignore_duration){
 
     /* try to plan a new traj. If fails, change to plan mode */
     double hand_t = ros::WallTime::now().toSec() + reach_out_t_; 
+    double hand_sim = ros::Time::now().toSec();   // sim-time anchor of the new traj's t=0
     if(hand_t > traj_end_t_){
         ps = p_;
         vs = v_;
         as.setZero();
         ve.setZero();
         ae.setZero();
-        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        if(YawP_.T_.size() != 0) YawP_.GetCmd(hand_sim - traj_sim_start_, ys, yds, ydds);
         else ys = yaw_;        // ys = yaw_;
         yds = yaw_v_;
         ydds = 0;
@@ -795,24 +832,33 @@ int Murder::Replan(const bool &new_target, const bool &ignore_duration){
         // cout<<"feas:"<<LRM_.IsFeasible(ps)<<endl;
     }
     else{
-        ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+        double dur = TrajOpt_.traj.getTotalDuration();
+        double tau = (ros::Time::now().toSec() + reach_out_t_) - traj_sim_start_;  // sim elapsed into active traj
+        if(tau > dur - 1e-4) tau = dur - 1e-4;
+        if(tau < 0) tau = 0;
+        ps = TrajOpt_.traj.getPos(tau);
         while(!LRM_.IsFeasible(ps) && hand_t > cur_t){
             hand_t -= reach_out_t_ / 10;
-            ps = TrajOpt_.traj.getPos(hand_t - traj_start_t_);
+            tau = max(0.0, tau - reach_out_t_ / 10);
+            ps = TrajOpt_.traj.getPos(tau);
             // cout<<"handt:"<<hand_t<<endl;
         }
         if(!LRM_.IsFeasible(ps)){
             hand_t = cur_t;
             // cout<<"handct:"<<hand_t<<endl;
             ps = p_;
+            hand_sim = ros::Time::now().toSec();
+        }
+        else{
+            hand_sim = traj_sim_start_ + tau;  // sim instant the active traj reaches the handoff
         }
         // cout<<"re"<<endl;
         // cout<<"feas:"<<LRM_.IsFeasible(ps)<<endl;
-        vs = TrajOpt_.traj.getVel(hand_t - traj_start_t_);
-        as = TrajOpt_.traj.getAcc(hand_t - traj_start_t_);
+        vs = TrajOpt_.traj.getVel(tau);
+        as = TrajOpt_.traj.getAcc(tau);
         ve.setZero();
         ae.setZero();
-        YawP_.GetCmd(hand_t - traj_start_t_, ys, yds, ydds);
+        YawP_.GetCmd(tau, ys, yds, ydds);
         yde = 0; 
         ydde = 0;
     }
@@ -821,6 +867,7 @@ int Murder::Replan(const bool &new_target, const bool &ignore_duration){
     if(LRM_.IsFeasible(pe) && TrajPlanB(ps, vs, as, pe, ve, 
                 ae, ys, yds, ydds, target_(3), yde, ydde, FG_.f_grid_[target_f_id_].center_, hand_t)){
         traj_start_t_ = hand_t;
+        traj_sim_start_ = hand_sim;
         traj_end_t_ = TrajOpt_.traj.getTotalDuration() + traj_start_t_;
         replan_t_ = min(replan_duration_, TrajOpt_.traj.getTotalDuration()) + traj_start_t_;
         PublishTraj(false);
@@ -1093,6 +1140,7 @@ void Murder::PublishTraj(bool recover){
     else{               //normal traj
         traj.state = 2;
         traj.start_t = traj_start_t_;
+        traj.sim_start_t = traj_sim_start_;
         traj.coef_p.resize(TrajOpt_.traj.getPieceNum() * 6);
         traj.t_p.resize(TrajOpt_.traj.getPieceNum());
         traj.order_p = 5;

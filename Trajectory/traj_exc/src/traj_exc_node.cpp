@@ -131,7 +131,10 @@ void RunCallback(const ros::TimerEvent &e){
     }
     else if(traj_state_ == 2){
         // cout<<traj_.getPieceNum()<<endl;
-        double cur_t = ros::WallTime::now().toSec();
+        // Trajectory execution advances in sim time (ros::Time, honors /clock),
+        // while replanning in the murder node stays on wall time. start_t_ is the
+        // sim-time anchor (sim_start_t) shared by the planner, so handoffs stay continuous.
+        double cur_t = ros::Time::now().toSec();
         if(cur_t - start_t_> traj_.getTotalDuration()){
             cur_t = start_t_ + traj_.getTotalDuration() - 1e-4;
             v.setZero();
@@ -258,8 +261,10 @@ void TrajCallback(const swarm_exp_msgs::LocalTrajConstPtr &traj){
 
 bool TryUpdateTraj(){
     if(trajs_.empty()) return false;
-    double cur_t = ros::WallTime::now().toSec();
-    if(trajs_.front().start_t > cur_t) return false;
+    // Activate a queued trajectory when sim time reaches its sim anchor, so the
+    // handoff fires exactly when the robot reaches the planned handoff state.
+    double cur_t = ros::Time::now().toSec();
+    if(trajs_.front().sim_start_t > cur_t) return false;
     if(trajs_.front().state == 1){
         traj_state_ = 1;
         recover_pt_(0) = trajs_.front().recover_pt.x;
@@ -268,7 +273,7 @@ bool TryUpdateTraj(){
     }
     else if(trajs_.front().state == 2){
         traj_state_ = 2;
-        start_t_ = trajs_.front().start_t;
+        start_t_ = trajs_.front().sim_start_t;
         int col = 0;
         int t_idx = 0;
         Eigen::MatrixXd cM(3, 6);

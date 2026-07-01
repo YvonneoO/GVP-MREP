@@ -179,6 +179,12 @@ private:
 
     double last_map_update_t_;    //blockmap & DTG
     double traj_start_t_, traj_end_t_;
+    // Sim-time (ros::Time, honors /clock) anchor of the ACTIVE trajectory's t=0.
+    // Replan cadence (traj_start_t_/traj_end_t_/replan_t_/plan_t_) stays on wall
+    // time; trajectory PARAMETRIZATION (handoff sampling, "finished" test,
+    // TrajCheck window, executor sampling) uses this sim anchor so the robot
+    // advances along the traj at sim rate, RTF-independent.
+    double traj_sim_start_;
     double reach_out_t_;
     double traj_length_;
     double plan_t_, replan_t_;
